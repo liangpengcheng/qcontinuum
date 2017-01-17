@@ -3,6 +3,7 @@ package network
 import (
 	"bytes"
 	"encoding/binary"
+	"io"
 	"log"
 	"net"
 	"runtime/debug"
@@ -37,31 +38,39 @@ func ReadFromConnect(conn net.Conn, length int) ([]byte, error) {
 	}()
 
 	data := make([]byte, length)
-	bufsize := maxMessageLength
-	buf := make([]byte, bufsize)
-	i := 0
-	for {
-		if length < bufsize {
-			if length == 0 {
-				return data, nil
-			}
-			remain := make([]byte, length)
-			r, err := conn.Read(remain)
-			if err != nil {
-				return nil, err
-			}
-			copy(data[i:(i+r)], remain[0:r])
-			i += r
-			length -= r
-		} else {
-			r, err := conn.Read(buf)
-			if err != nil {
-				return nil, err
-			}
-			copy(data[i:(i+r)], buf[0:r])
-			i += r
-			length -= r
-		}
-
+	len, err := io.ReadFull(conn, data)
+	if err == nil && len == length {
+		return data, nil
 	}
+	return nil, err
+	/*
+		bufsize := maxMessageLength
+		buf := make([]byte, bufsize)
+		i := 0
+		for {
+			if length < bufsize {
+				if length == 0 {
+					return data, nil
+				}
+				remain := make([]byte, length)
+				r, err := conn.Read(remain)
+				if err != nil {
+					return nil, err
+				}
+				copy(data[i:(i+r)], remain[0:r])
+				i += r
+				length -= r
+			} else {
+				r, err := conn.Read(buf)
+				if err != nil {
+					return nil, err
+				}
+				copy(data[i:(i+r)], buf[0:r])
+				i += r
+				length -= r
+			}
+
+		}
+	*/
+
 }
