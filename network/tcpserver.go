@@ -35,8 +35,8 @@ func ReadMessage(conn net.Conn) (*MessageHead, []byte, error) {
 		return nil, nil, err
 	}
 	h := ReadHead(buffer)
-	if h.Id > 1024 || h.Length < 0 {
-		log.Printf("message error: id(%d),len(%d)", h.Id, h.Length)
+	if h.ID > 1024 || h.Length < 0 {
+		log.Printf("message error: id(%d),len(%d)", h.ID, h.Length)
 		conn.Close()
 		return nil, nil, errors.New("message not in range")
 	}

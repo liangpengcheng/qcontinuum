@@ -11,24 +11,26 @@ import (
 
 var maxMessageLength = 4096
 
-//message head
+// MessageHead the message head
+// length and id
 type MessageHead struct {
 	Length int32
-	Id     int32
+	ID     int32
 }
 
-//读取消息头
+// ReadHead read the messazge head
+// 读取消息头
 func ReadHead(src []byte) MessageHead {
 	buf := bytes.NewBuffer(src)
 
 	buf.Write(src)
 	var head MessageHead
 	binary.Read(buf, binary.LittleEndian, &head.Length)
-	binary.Read(buf, binary.LittleEndian, &head.Id)
+	binary.Read(buf, binary.LittleEndian, &head.ID)
 	return head
 }
 
-//读取消息
+// ReadFromConnect 读取消息
 func ReadFromConnect(conn net.Conn, length int) ([]byte, error) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -43,34 +45,5 @@ func ReadFromConnect(conn net.Conn, length int) ([]byte, error) {
 		return data, nil
 	}
 	return nil, err
-	/*
-		bufsize := maxMessageLength
-		buf := make([]byte, bufsize)
-		i := 0
-		for {
-			if length < bufsize {
-				if length == 0 {
-					return data, nil
-				}
-				remain := make([]byte, length)
-				r, err := conn.Read(remain)
-				if err != nil {
-					return nil, err
-				}
-				copy(data[i:(i+r)], remain[0:r])
-				i += r
-				length -= r
-			} else {
-				r, err := conn.Read(buf)
-				if err != nil {
-					return nil, err
-				}
-				copy(data[i:(i+r)], buf[0:r])
-				i += r
-				length -= r
-			}
-
-		}
-	*/
 
 }
