@@ -17,8 +17,9 @@ type Message struct {
 
 // Event 自定义事件
 type Event struct {
-	ID    int32  //eventid
-	Param string //param
+	ID    int32       //eventid
+	Param string      //param
+	Peer  *ClientPeer //事件中的peer,可以为nil
 }
 
 var (
