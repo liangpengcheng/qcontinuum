@@ -3,7 +3,7 @@ package network
 import "github.com/liangpengcheng/Qcontinuum/base"
 
 // MsgCallback 消息处理函数
-type MsgCallback func(msg Message)
+type MsgCallback func(msg *Message)
 
 // EventCallback 时间处理
 type EventCallback func(event *Event)
@@ -33,7 +33,7 @@ var (
 
 // Processor 消息处理器
 type Processor struct {
-	MessageChan   chan Message
+	MessageChan   chan *Message
 	EventChan     chan *Event
 	CallbackMap   map[int32]MsgCallback
 	EventCallback map[int32]EventCallback
@@ -42,7 +42,7 @@ type Processor struct {
 // NewProcessor 新建处理器，包含初始化操作
 func NewProcessor() *Processor {
 	p := &Processor{
-		MessageChan: make(chan Message, 1024),
+		MessageChan: make(chan *Message, 1024),
 		EventChan:   make(chan *Event, 1024),
 	}
 	return p
@@ -82,6 +82,7 @@ func (p *Processor) StartProcess() {
 			}
 		case event := <-p.EventChan:
 			if event.ID == ExitEvent {
+				base.LogInfo("Processor exit : %s", event.Param)
 				return
 			}
 			if cb, ok := p.EventCallback[event.ID]; ok {

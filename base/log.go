@@ -9,6 +9,7 @@ import (
 var logFile *os.File
 var logger *log.Logger
 
+// InitLogFile 初始化Log 文件，不调用的话，就不会写入文件
 func InitLogFile(filename string) {
 	var err error
 	logFile, err = os.OpenFile(filename+".log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
@@ -18,6 +19,7 @@ func InitLogFile(filename string) {
 	logger = log.New(logFile, "", log.LstdFlags)
 }
 
+// CloseLogFile 关闭日志文件
 func CloseLogFile() {
 	if logFile != nil {
 		logFile.Close()
@@ -26,6 +28,8 @@ func CloseLogFile() {
 
 func _logFormat(prefix string, format string, v ...interface{}) {
 	s := fmt.Sprintf(prefix+format, v...)
-	logger.Printf(s)
+	if logger != nil {
+		logger.Printf(s)
+	}
 	consoleLog(s)
 }
