@@ -57,7 +57,7 @@ func (s *Server) BlockAccept(proc *Processor) {
 		for {
 			conn, err := s.Listener.Accept()
 			if err == nil {
-				base.LogDebug("incomming connection ", conn.RemoteAddr().String())
+				base.LogDebug("incomming connection :%s", conn.RemoteAddr().String())
 				client := &ClientPeer{
 					Connection: conn,
 					Serv:       s,
