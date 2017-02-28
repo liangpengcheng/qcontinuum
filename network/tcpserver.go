@@ -4,6 +4,8 @@ import (
 	"errors"
 	"log"
 	"net"
+
+	"github.com/liangpengcheng/Qcontinuum/base"
 )
 
 // Server tcp server
@@ -13,7 +15,7 @@ type Server struct {
 
 // NewTCP4Server new tcp server
 func NewTCP4Server(bindAddress string) (*Server, error) {
-	serverAddr, err := net.ResolveTCPAddr("tpc4", bindAddress)
+	serverAddr, err := net.ResolveTCPAddr("tcp4", bindAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -47,4 +49,33 @@ func ReadMessage(conn net.Conn) (*MessageHead, []byte, error) {
 	}
 	return &h, buffer, nil
 
+}
+
+// BlockAccept accept
+func (s *Server) BlockAccept(proc *Processor) {
+	if s.Listener != nil {
+		for {
+			conn, err := s.Listener.Accept()
+			if err == nil {
+				base.LogDebug("incomming connection ", conn.RemoteAddr().String())
+				client := &ClientPeer{
+					Connection: conn,
+					Serv:       s,
+					Flag:       0,
+				}
+				event := &Event{
+					ID:   AddEvent,
+					Peer: client,
+				}
+				proc.EventChan <- event
+				go client.ConnectionHandler(proc)
+			} else {
+				base.LogError("accept error :%s", err.Error())
+				break
+			}
+		}
+
+	} else {
+		base.LogError("create listener first")
+	}
 }
