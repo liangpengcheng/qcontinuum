@@ -42,8 +42,10 @@ type Processor struct {
 // NewProcessor 新建处理器，包含初始化操作
 func NewProcessor() *Processor {
 	p := &Processor{
-		MessageChan: make(chan *Message, 1024),
-		EventChan:   make(chan *Event, 1024),
+		MessageChan:   make(chan *Message, 1024),
+		EventChan:     make(chan *Event, 1024),
+		EventCallback: make(map[int32]EventCallback),
+		CallbackMap:   make(map[int32]MsgCallback),
 	}
 	return p
 }
@@ -72,6 +74,7 @@ func (p *Processor) RemoveEventCallback(id int32) {
 // 只有调用了这个借口，处理器才会处理实际的信息，以及实际发送消息
 func (p *Processor) StartProcess() {
 
+	base.LogInfo("processor is starting ")
 	for {
 		select {
 		case msg := <-p.MessageChan:
