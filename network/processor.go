@@ -61,7 +61,7 @@ func (p *Processor) addCallback(id int32, callback MsgCallback) {
 // AddCallback 设置回调
 func (p *Processor) AddCallback(m proto.Message, callback MsgCallback) {
 	tname := proto.MessageName(m)
-	id := proto.EnumValueMap(tname + "MsgID")["ID"]
+	id := proto.EnumValueMap(tname + "_MsgID")["ID"]
 	if id != 0 {
 		p.addCallback(id, callback)
 	} else {
