@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+// 登陆消息，客户端发送给登录服务器
+message C2SLogin{
+    enum MsgID{
+        Zero=0;//proto3中，enum第一个值必须是0
+        ID=1;
+    }
+     string username =1;
+     string password =2;
+}
+// 登录结果
+enum LoginResult{
+    Success =0;
+    UserNameError =-1;
+    PasswordError=-2;
+    UnknownError=-3;        
+}
+// 登录结果消息，服务器发送给客户端
+message S2CLogin{
+    enum MsgID{
+        Zero=0;
+        ID=2;
+    }
+    LoginResult result =1;
+    string token=2; //only works when result == Success
+}

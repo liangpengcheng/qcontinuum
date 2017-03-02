@@ -1,6 +1,9 @@
 package network
 
-import "github.com/liangpengcheng/Qcontinuum/base"
+import (
+	"github.com/golang/protobuf/proto"
+	"github.com/liangpengcheng/Qcontinuum/base"
+)
 
 // MsgCallback 消息处理函数
 type MsgCallback func(msg *Message)
@@ -51,8 +54,19 @@ func NewProcessor() *Processor {
 }
 
 // AddCallback 设置回调
-func (p *Processor) AddCallback(id int32, callback MsgCallback) {
+func (p *Processor) addCallback(id int32, callback MsgCallback) {
 	p.CallbackMap[id] = callback
+}
+
+// AddCallback 设置回调
+func (p *Processor) AddCallback(m proto.Message, callback MsgCallback) {
+	tname := proto.MessageName(m)
+	id := proto.EnumValueMap(tname + "MsgID")["ID"]
+	if id != 0 {
+		p.addCallback(id, callback)
+	} else {
+		base.LogError("can't find message %s", tname)
+	}
 }
 
 // RemoveCallback 删除回调
