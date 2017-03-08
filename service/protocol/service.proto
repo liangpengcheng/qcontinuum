@@ -14,7 +14,8 @@ enum LoginResult{
     Success =0;
     UserNameError =-1;
     PasswordError=-2;
-    UnknownError=-3;        
+    TokenError =-3;
+    UnknownError=-4;        
 }
 // 登录结果消息，服务器发送给客户端
 message S2CLogin{
@@ -23,5 +24,26 @@ message S2CLogin{
         ID=2;
     }
     LoginResult result =1;
-    string token=2; //only works when result == Success
+    int64 userid =2;
+    string token=3; //only works when result == Success
+    string connectionServer =4;//connection server address
+}
+
+// token登录
+message C2STokenLogin{
+    enum MsgID{
+        Zero =0;
+        ID =3;
+    }
+    int64 userid =1;
+    string token =2;
+}
+
+// token登陆结果
+message S2CTokenLogin{
+    enum MsgID{
+        Zero =0;
+        ID =4;
+    }
+    LoginResult resut =1;
 }
