@@ -19,6 +19,8 @@ func main() {
 		ser, err := network.NewTCP4Server(*port)
 		if err == nil {
 			proc := network.NewProcessor()
+			// 注意线程安全
+			proc.ImmediateMode = true
 			proc.AddEventCallback(network.AddEvent, func(event *network.Event) {
 				go func() {
 					//force disconnect after 15 seconds

@@ -40,6 +40,8 @@ type Processor struct {
 	EventChan     chan *Event
 	CallbackMap   map[int32]MsgCallback
 	EventCallback map[int32]EventCallback
+	// ImmediateMode 立即回调消息，如果想要线程安全，必须设置为false，默认为false
+	ImmediateMode bool
 }
 
 // NewProcessor 新建处理器，包含初始化操作
@@ -49,6 +51,7 @@ func NewProcessor() *Processor {
 		EventChan:     make(chan *Event, 1024),
 		EventCallback: make(map[int32]EventCallback),
 		CallbackMap:   make(map[int32]MsgCallback),
+		ImmediateMode: false,
 	}
 	return p
 }

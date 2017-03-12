@@ -38,7 +38,14 @@ func (peer *ClientPeer) ConnectionHandler(proc *Processor) {
 			Head: *h,
 			Body: buffer,
 		}
-		proc.MessageChan <- msg
+		//是否立即处理这个消息，如果立即处理的话，就在当前线程处理了，小心线程安全问题
+		if proc.ImmediateMode {
+			if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
+				cb(msg)
+			}
+		} else {
+			proc.MessageChan <- msg
+		}
 	}
 	event := &Event{
 		ID:   RemoveEvent,
