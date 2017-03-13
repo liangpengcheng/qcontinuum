@@ -47,3 +47,8 @@ func NewRedisNode(addr string, pwd string, dbindex int32) *RedisNode {
 func (node *RedisNode) GetRedis() redis.Conn {
 	return node.pool.Get()
 }
+
+// Put 放回去
+func (node *RedisNode) Put(conn redis.Conn) {
+	conn.Close()
+}
