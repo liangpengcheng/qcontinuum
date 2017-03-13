@@ -1,4 +1,4 @@
-package config
+package main
 
 import (
 	"encoding/json"
@@ -11,7 +11,9 @@ import (
 // Config 配置信息
 type Config struct {
 	// AuthTimeout 认证超时，如果一个链接在连接后 AuthTimeout 秒钟之后还没有发送认证消息，就强制断开链接
-	AuthTimeout int32
+	AuthTimeout             int32
+	UserPasswordDBCacheHost string
+	UserPasswordDBHost      string
 }
 
 // NewConfigFromJSON 加载一个配置文件

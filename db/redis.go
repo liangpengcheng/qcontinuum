@@ -23,13 +23,16 @@ func NewRedisNode(addr string, pwd string, dbindex int32) *RedisNode {
 					base.LogError("redis connect error:%s", err.Error())
 					return nil, err
 				}
-				if _, err := r.Do("AUTH", pwd); err != nil {
-					base.LogError("redis auth error :%s", err.Error())
-					return nil, err
+				if len(pwd) > 0 {
+					if _, err := r.Do("AUTH", pwd); err != nil {
+						base.LogError("redis auth error :%s", err.Error())
+					}
 				}
-				if _, err := r.Do("SELECT", dbindex); err != nil {
-					base.LogError("redis select error :%s ", err.Error())
-					return nil, err
+				if dbindex > 0 {
+					if _, err := r.Do("SELECT", dbindex); err != nil {
+						base.LogError("redis select error :%s ", err.Error())
+						return nil, err
+					}
 				}
 				return r, nil
 

@@ -21,6 +21,24 @@
 			"revisionTime": "2016-11-17T03:31:26Z"
 		},
 		{
+			"checksumSHA1": "+iR8e+zk4M5L65XvF7eOY8nR2cM=",
+			"path": "gopkg.in/brett19/jsonx.v1",
+			"revision": "5b7baa20429a46a5543ee259664cc86502738cad",
+			"revisionTime": "2016-12-13T19:40:16Z"
+		},
+		{
+			"checksumSHA1": "mo/Uamfa0/izbF79eKLrg1Vk76I=",
+			"path": "gopkg.in/couchbase/gocb.v1",
+			"revision": "6fca8af693ca20d33fd8427a09636362061a3b71",
+			"revisionTime": "2016-12-21T09:34:16Z"
+		},
+		{
+			"checksumSHA1": "6DyN87pPi2QNSNA9wN43FT86MK0=",
+			"path": "gopkg.in/couchbase/gocbcore.v2",
+			"revision": "22d72f05785ba26be033aa8b6726435b5e50a7a0",
+			"revisionTime": "2016-12-13T20:49:17Z"
+		},
+		{
 			"checksumSHA1": "YFQU7VULoTU4TwPz3V97b2exyxE=",
 			"path": "gopkg.in/mgo.v2",
 			"revision": "3f83fa5005286a7fe593b055f0d7771a7dce4655",
