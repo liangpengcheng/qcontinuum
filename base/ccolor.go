@@ -3,16 +3,25 @@ package base
 import "fmt"
 
 const (
+	// TextBlack black
 	TextBlack = iota + 30
+	// TextRed red
 	TextRed
+	// TextGreen green
 	TextGreen
+	// TextYellow yellow
 	TextYellow
+	// TextBlue blue
 	TextBlue
+	// TextMagenta magenta
 	TextMagenta
+	// TextCyan cyan
 	TextCyan
+	// TextWhite whilte
 	TextWhite
 )
 
+// Black black string
 func Black(str string) string {
 	return textColor(TextBlack, str)
 }
@@ -53,5 +62,3 @@ func Cyan(str string) string {
 func White(str string) string {
 	return textColor(TextWhite, str)
 }
-
-
