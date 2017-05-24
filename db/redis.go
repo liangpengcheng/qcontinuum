@@ -2,7 +2,7 @@ package db
 
 import "github.com/garyburd/redigo/redis"
 import "time"
-import "github.com/liangpengcheng/Qcontinuum/base"
+import "github.com/liangpengcheng/qcontinuum/base"
 
 // RedisNode 一个redis节点
 type RedisNode struct {

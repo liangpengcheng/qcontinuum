@@ -1,7 +1,7 @@
 package db
 
 import "gopkg.in/mgo.v2"
-import "github.com/liangpengcheng/Qcontinuum/base"
+import "github.com/liangpengcheng/qcontinuum/base"
 
 // MongoDB mongo
 type MongoDB struct {

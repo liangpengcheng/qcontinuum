@@ -5,7 +5,7 @@ import (
 	"log"
 	"net"
 
-	"github.com/liangpengcheng/Qcontinuum/base"
+	"github.com/liangpengcheng/qcontinuum/base"
 )
 
 // Server tcp server

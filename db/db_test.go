@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/garyburd/redigo/redis"
-	"github.com/liangpengcheng/Qcontinuum/base"
+	"github.com/liangpengcheng/qcontinuum/base"
 )
 
 func TestRedis(t *testing.T) {

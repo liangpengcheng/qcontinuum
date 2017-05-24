@@ -5,11 +5,11 @@ import (
 
 	"time"
 
-	"github.com/liangpengcheng/Qcontinuum/base"
-	"github.com/liangpengcheng/Qcontinuum/network"
+	"github.com/liangpengcheng/qcontinuum/base"
+	"github.com/liangpengcheng/qcontinuum/network"
 )
 
-var cfg *Config
+var cfg *loginConfig
 
 func main() {
 	cfg = NewConfigFromFile("../runtime/login.json")

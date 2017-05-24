@@ -2,7 +2,7 @@ package network
 
 import (
 	"github.com/golang/protobuf/proto"
-	"github.com/liangpengcheng/Qcontinuum/base"
+	"github.com/liangpengcheng/qcontinuum/base"
 )
 
 // MsgCallback 消息处理函数

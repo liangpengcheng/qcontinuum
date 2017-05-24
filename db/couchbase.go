@@ -1,7 +1,7 @@
 package db
 
 import (
-	"github.com/liangpengcheng/Qcontinuum/base"
+	"github.com/liangpengcheng/qcontinuum/base"
 	"gopkg.in/couchbase/gocb.v1"
 )
 

@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"io/ioutil"
 
-	"github.com/liangpengcheng/QContinuum/base"
+	"github.com/liangpengcheng/qcontinuum/base"
 )
 
-type config struct {
+type serviceMangerConfig struct {
 	Port string
 }
 
-func newConfig(jstring []byte) *config {
-	cfg := &config{}
+func newConfig(jstring []byte) *serviceMangerConfig {
+	cfg := &serviceMangerConfig{}
 	err := json.Unmarshal(jstring, cfg)
 	if err != nil {
 		base.LogError("load config error %s", err.Error())
@@ -20,7 +20,7 @@ func newConfig(jstring []byte) *config {
 	}
 	return cfg
 }
-func newConfigFromFile(filename string) *config {
+func newConfigFromFile(filename string) *serviceMangerConfig {
 	bytes, err := ioutil.ReadFile(filename)
 	if err == nil {
 		return newConfig(bytes)

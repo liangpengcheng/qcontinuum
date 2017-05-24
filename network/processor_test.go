@@ -2,7 +2,7 @@ package network
 
 import "testing"
 import "time"
-import "github.com/liangpengcheng/Qcontinuum/base"
+import "github.com/liangpengcheng/qcontinuum/base"
 import "net"
 
 func TestProcessor(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 
 	"fmt"
 
-	"github.com/liangpengcheng/Qcontinuum/base"
+	"github.com/liangpengcheng/qcontinuum/base"
 )
 
 //ClientPeer client connection peer
