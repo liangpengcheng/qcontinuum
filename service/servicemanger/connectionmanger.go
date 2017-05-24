@@ -9,7 +9,7 @@ import (
 type connectionAgent struct {
 	peer  *network.ClientPeer
 	ip    string
-	users map[int64]int64
+	users map[int64]bool
 }
 
 // connectionManger connection manger
@@ -22,7 +22,8 @@ type connectionManger struct {
 // newConnectionManger 创建一个连接管理器
 func newConnectionManger() *connectionManger {
 	manger := &connectionManger{
-		processor: network.NewProcessor(),
+		processor:   network.NewProcessor(),
+		connections: make(map[*network.ClientPeer]*connectionAgent),
 	}
 	manger.processor.AddEventCallback(network.AddEvent, manger.onConnectionServerConnected)
 	manger.processor.AddEventCallback(network.RemoveEvent, manger.onConnectionServerClose)
@@ -34,18 +35,18 @@ func (manger *connectionManger) onConnectionServerConnected(event *network.Event
 
 }
 
-// connectionagent下线了
+// connectionagent下线了,注意清除这个服务器上所有玩家的状态
 func (manger *connectionManger) onConnectionServerClose(event *network.Event) {
 	delete(manger.connections, event.Peer)
 }
 
-// connectionagetn 要求注册
+// connectionagetn 要求注册,这个地方要把服务器注册到db里面
 func (manger *connectionManger) onConnectionRegister(msg *network.Message) {
-	con2sm := protocol.Con2SMRegister
+	con2sm := protocol.Con2SMRegister{}
 	proto.Unmarshal(msg.Body, &con2sm)
 	ca := &connectionAgent{
 		peer:  msg.Peer,
-		users: make(map[*network.ClientPeer]*connectionAgent),
+		users: make(map[int64]bool),
 		ip:    con2sm.PublicIP,
 	}
 	manger.connections[msg.Peer] = ca
