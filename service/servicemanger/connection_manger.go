@@ -7,7 +7,8 @@ import (
 )
 
 type connectionAgent struct {
-	peer *network.ClientPeer
+	peer  *network.ClientPeer
+	users map[int64]int64
 }
 
 // ConnectionManger connection manger
@@ -28,12 +29,16 @@ func NewConnectionManger() *ConnectionManger {
 }
 
 func (manger *ConnectionManger) onConnectionServerConnected(event *network.Event) {
-	manger.connections.PushBack(event.Peer)
+	ca := &connectionAgent{
+		peer:  event.Peer,
+		users: make(map[int64]int64),
+	}
+	manger.connections.PushBack(ca)
 }
 
 func (manger *ConnectionManger) onConnectionServerClose(event *network.Event) {
 	for c := manger.connections.Front(); c != nil; c = c.Next() {
-		if c.Value == event.Peer {
+		if c.Value.(connectionAgent).peer == event.Peer {
 			manger.connections.Remove(c)
 			return
 		}
