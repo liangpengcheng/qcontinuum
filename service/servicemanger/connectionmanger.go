@@ -1,21 +1,21 @@
 package main
 
 import (
-	"container/list"
-
-	"github.com/liangpengcheng/qcontinuum/network"
-	"github.com/liangpengcheng/qcontinuum/base"
+	proto "github.com/golang/protobuf/proto"
+	network "github.com/liangpengcheng/qcontinuum/network"
+	"github.com/liangpengcheng/qcontinuum/service/protocol"
 )
 
 type connectionAgent struct {
 	peer  *network.ClientPeer
+	ip    string
 	users map[int64]int64
 }
 
 // connectionManger connection manger
 // Connection Server连接后，并没有认证策略，所以连接管理部署的时候注意网络安全
 type connectionManger struct {
-	connections list.List
+	connections map[*network.ClientPeer]*connectionAgent
 	processor   *network.Processor
 }
 
@@ -29,20 +29,24 @@ func newConnectionManger() *connectionManger {
 	return manger
 }
 
+// connectionagent连接上来了
 func (manger *connectionManger) onConnectionServerConnected(event *network.Event) {
-	ca := &connectionAgent{
-		peer:  event.Peer,
-		users: make(map[int64]int64),
-	}
-	manger.connections.PushBack(ca)
+
 }
 
+// connectionagent下线了
 func (manger *connectionManger) onConnectionServerClose(event *network.Event) {
-	for c := manger.connections.Front(); c != nil; c = c.Next() {
-		if c.Value.(connectionAgent).peer == event.Peer {
-			manger.connections.Remove(c)
-			base.LogDebug("connection agent disconnected")
-			return
-		}
+	delete(manger.connections, event.Peer)
+}
+
+// connectionagetn 要求注册
+func (manger *connectionManger) onConnectionRegister(msg *network.Message) {
+	con2sm := protocol.Con2SMRegister
+	proto.Unmarshal(msg.Body, &con2sm)
+	ca := &connectionAgent{
+		peer:  msg.Peer,
+		users: make(map[*network.ClientPeer]*connectionAgent),
+		ip:    con2sm.PublicIP,
 	}
+	manger.connections[msg.Peer] = ca
 }

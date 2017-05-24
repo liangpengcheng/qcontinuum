@@ -1,5 +1,5 @@
 syntax = "proto3";
-
+package protocol;
 // 登陆消息，客户端发送给登录服务器
 message C2SLogin{
     enum MsgID{
@@ -46,4 +46,23 @@ message S2CTokenLogin{
         ID =4;
     }
     LoginResult resut =1;
+}
+
+
+// connection到service manger注册的消息
+message Con2SMRegister{
+    enum MsgID{
+        Zero =0;
+        ID = 5;
+    }
+    string publicIP = 1;
+}
+// server manger 返回注册结果
+message SM2ConRegisterResult{
+    enum MsgID{
+        Zero =0;
+        ID =6;
+    }
+    int32   serverindex =1;
+    int32   result =2; //结果 0失败，1成功
 }
