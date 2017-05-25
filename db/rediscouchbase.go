@@ -1,6 +1,9 @@
 package db
 
-import "github.com/garyburd/redigo/redis"
+import (
+	"github.com/garyburd/redigo/redis"
+	"github.com/golang/protobuf/proto"
+)
 
 type rediscouchbaseQuery struct {
 	node      *RedisNode
@@ -30,4 +33,18 @@ func (rc *rediscouchbaseQuery) Set(key string, v string, expiry uint32) {
 	}
 	//设置couchbase
 	rc.couchNode.bucket.Upsert(key, v, expiry)
+}
+
+func (rc *rediscouchbaseQuery) GetObj(key string, obj proto.Message) {
+}
+func (rc *rediscouchbaseQuery) SetObj(key string, obj proto.Message, expiry uint32) {
+
+}
+
+// NewRedisCouchbaseQuery 新建一个组合
+func NewRedisCouchbaseQuery(rnode *RedisNode, cbnode *CouchbaseCluster) IQuery {
+	return &rediscouchbaseQuery{
+		node:      rnode,
+		couchNode: cbnode,
+	}
 }
