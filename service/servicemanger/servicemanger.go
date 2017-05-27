@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/liangpengcheng/qcontinuum/base"
 	"github.com/liangpengcheng/qcontinuum/network"
+	_ "github.com/liangpengcheng/qcontinuum/service/servicedb"
 )
 
 func main() {

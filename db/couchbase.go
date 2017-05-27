@@ -19,9 +19,10 @@ func NewCouchbaseConnection(server string, bucketName string, pwd string) *Couch
 			couchbase := &CouchbaseCluster{
 				bucket: bk,
 			}
+			base.LogInfo("coubase started")
 			return couchbase
 		}
-		base.LogError("open bucket error :%s", error.Error())
+		base.LogError("open bucket error :%s", err.Error())
 	} else {
 		base.LogError("connect couchbase error :%s", error.Error())
 	}
