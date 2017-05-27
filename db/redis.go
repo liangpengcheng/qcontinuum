@@ -1,8 +1,12 @@
 package db
 
-import "github.com/garyburd/redigo/redis"
-import "time"
-import "github.com/liangpengcheng/qcontinuum/base"
+import (
+	"fmt"
+	"time"
+
+	"github.com/garyburd/redigo/redis"
+	"github.com/liangpengcheng/qcontinuum/base"
+)
 
 // RedisNode 一个redis节点
 type RedisNode struct {
@@ -51,4 +55,69 @@ func (node *RedisNode) GetRedis() redis.Conn {
 // Put 放回去
 func (node *RedisNode) Put(conn redis.Conn) {
 	conn.Close()
+}
+
+// GetInterfacePtr 泛型获得,没有这个key的时候也返回error
+func GetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) error {
+	ret, err := conn.Do("get", key)
+	//ret, err := redis.String(conn.Do("get", key))
+	if err == nil && ret != nil {
+		var formaterr error
+		switch out := valuePtr.(type) {
+		case *string:
+			*out, formaterr = redis.String(ret, err)
+			break
+		case *int:
+			*out, formaterr = redis.Int(ret, err)
+			break
+		case *int64:
+			*out, formaterr = redis.Int64(ret, err)
+			break
+		case *float64:
+			*out, formaterr = redis.Float64(ret, err)
+			break
+		case *float32:
+			var ret64 float64
+			ret64, formaterr = redis.Float64(ret, err)
+			*out = float32(ret64)
+			break
+		case *[]byte:
+			*out, formaterr = redis.Bytes(ret, err)
+			break
+		case *bool:
+			*out, formaterr = redis.Bool(ret, err)
+		default:
+			base.LogError("can't support type")
+			break
+		}
+		if formaterr != nil {
+			return fmt.Errorf("type error when db.get")
+		}
+		return nil
+	}
+	return fmt.Errorf("value not found")
+}
+
+// SetInterfacePtr set a value by interface
+func SetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) {
+	switch out := valuePtr.(type) {
+	case *int:
+		conn.Do("set", key, *out)
+	case *int64:
+		conn.Do("set", key, *out)
+	case *float32:
+		conn.Do("set", key, *out)
+	case *string:
+		conn.Do("set", key, *out)
+	case *float64:
+		conn.Do("set", key, *out)
+	case *[]byte:
+		conn.Do("set", key, *out)
+	case *bool:
+		conn.Do("set", key, *out)
+	default:
+		base.LogError("can't support type")
+		break
+	}
+
 }
