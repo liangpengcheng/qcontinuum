@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"gopkg.in/brett19/jsonx.v1"
 	"net/http"
 	"time"
 )
@@ -28,10 +27,10 @@ type n1qlResponseMetrics struct {
 	ExecutionTime string `json:"executionTime"`
 	ResultCount   uint   `json:"resultCount"`
 	ResultSize    uint   `json:"resultSize"`
-	MutationCount uint   `json:"mutationCount",omitempty`
-	SortCount     uint   `json:"sortCount",omitempty`
-	ErrorCount    uint   `json:"errorCount",omitempty`
-	WarningCount  uint   `json:"warningCount",omitempty`
+	MutationCount uint   `json:"mutationCount,omitempty"`
+	SortCount     uint   `json:"sortCount,omitempty"`
+	ErrorCount    uint   `json:"errorCount,omitempty"`
+	WarningCount  uint   `json:"warningCount,omitempty"`
 }
 
 type n1qlResponse struct {
@@ -53,6 +52,7 @@ func (e *n1qlMultiError) Code() uint32 {
 	return (*e)[0].Code
 }
 
+// QueryResultMetrics encapsulates various metrics gathered during a queries execution.
 type QueryResultMetrics struct {
 	ElapsedTime   time.Duration
 	ExecutionTime time.Duration
@@ -131,9 +131,14 @@ func (r *n1qlResults) One(valuePtr interface{}) error {
 		}
 		return ErrNoResults
 	}
-	// Ignore any errors occuring after we already have our result
-	r.Close()
-	// Return no error as we got the one result already.
+
+	// Ignore any errors occurring after we already have our result
+	err := r.Close()
+	if err != nil {
+		// Return no error as we got the one result already.
+		return nil
+	}
+
 	return nil
 }
 
@@ -211,7 +216,10 @@ func (c *Cluster) executeN1qlQuery(n1qlEp string, opts map[string]interface{}, c
 		return nil, err
 	}
 
-	resp.Body.Close()
+	err = resp.Body.Close()
+	if err != nil {
+		logDebugf("Failed to close socket (%s)", err)
+	}
 
 	if len(n1qlResp.Errors) > 0 {
 		return nil, (*n1qlMultiError)(&n1qlResp.Errors)
@@ -224,8 +232,15 @@ func (c *Cluster) executeN1qlQuery(n1qlEp string, opts map[string]interface{}, c
 		}
 	}
 
-	elapsedTime, _ := time.ParseDuration(n1qlResp.Metrics.ElapsedTime)
-	executionTime, _ := time.ParseDuration(n1qlResp.Metrics.ExecutionTime)
+	elapsedTime, err := time.ParseDuration(n1qlResp.Metrics.ElapsedTime)
+	if err != nil {
+		logDebugf("Failed to parse elapsed time duration (%s)", err)
+	}
+
+	executionTime, err := time.ParseDuration(n1qlResp.Metrics.ExecutionTime)
+	if err != nil {
+		logDebugf("Failed to parse execution time duration (%s)", err)
+	}
 
 	return &n1qlResults{
 		requestId:       n1qlResp.RequestId,
@@ -298,7 +313,7 @@ func (c *Cluster) doN1qlQuery(b *Bucket, q *N1qlQuery, params interface{}) (Quer
 			creds = c.auth.bucketN1ql(b.name)
 		} else {
 			creds = []userPassPair{
-				userPassPair{
+				{
 					Username: b.name,
 					Password: b.password,
 				},
@@ -351,7 +366,10 @@ func (c *Cluster) doN1qlQuery(b *Bucket, q *N1qlQuery, params interface{}) (Quer
 	// Do Prepared Statement Logic
 	var cachedStmt *n1qlCache
 
-	stmtStr := q.options["statement"].(string)
+	stmtStr, isStr := q.options["statement"].(string)
+	if !isStr {
+		return nil, ErrInternalError
+	}
 
 	c.clusterLock.RLock()
 	cachedStmt = c.queryCache[stmtStr]
@@ -398,251 +416,7 @@ func (c *Cluster) doN1qlQuery(b *Bucket, q *N1qlQuery, params interface{}) (Quer
 	return c.executeN1qlQuery(n1qlEp, execOpts, creds, timeout, client)
 }
 
-// Performs a n1ql query and returns a list of rows or an error.
+// ExecuteN1qlQuery performs a n1ql query and returns a list of rows or an error.
 func (c *Cluster) ExecuteN1qlQuery(q *N1qlQuery, params interface{}) (QueryResults, error) {
 	return c.doN1qlQuery(nil, q, params)
-}
-
-// SearchResultLocation holds the location of a hit in a list of search results.
-type SearchResultLocation struct {
-	Position       int    `json:"position,omitempty"`
-	Start          int    `json:"start,omitempty"`
-	End            int    `json:"end,omitempty"`
-	ArrayPositions []uint `json:"array_positions,omitempty"`
-}
-
-// SearchResultHit holds a single hit in a list of search results.
-type SearchResultHit struct {
-	Index       string                                       `json:"index,omitempty"`
-	Id          string                                       `json:"id,omitempty"`
-	Score       float64                                      `json:"score,omitempty"`
-	Explanation map[string]interface{}                       `json:"explanation,omitempty"`
-	Locations   map[string]map[string][]SearchResultLocation `json:"locations,omitempty"`
-	Fragments   map[string][]string                          `json:"fragments,omitempty"`
-	Fields      map[string]string                            `json:"fields,omitempty"`
-}
-
-// SearchResultTermFacet holds the results of a term facet in search results.
-type SearchResultTermFacet struct {
-	Term  string `json:"term,omitempty"`
-	Count int    `json:"count,omitempty"`
-}
-
-// SearchResultNumericFacet holds the results of a numeric facet in search results.
-type SearchResultNumericFacet struct {
-	Name  string  `json:"name,omitempty"`
-	Min   float64 `json:"min,omitempty"`
-	Max   float64 `json:"max,omitempty"`
-	Count int     `json:"count,omitempty"`
-}
-
-// SearchResultDateFacet holds the results of a date facet in search results.
-type SearchResultDateFacet struct {
-	Name  string `json:"name,omitempty"`
-	Min   string `json:"min,omitempty"`
-	Max   string `json:"max,omitempty"`
-	Count int    `json:"count,omitempty"`
-}
-
-// SearchResultFacet holds the results of a specified facet in search results.
-type SearchResultFacet struct {
-	Field         string                     `json:"field,omitempty"`
-	Total         int                        `json:"total,omitempty"`
-	Missing       int                        `json:"missing,omitempty"`
-	Other         int                        `json:"missing,omitempty"`
-	Terms         []SearchResultTermFacet    `json:"terms,omitempty"`
-	NumericRanges []SearchResultNumericFacet `json:"numeric_ranges,omitempty"`
-	DateRanges    []SearchResultDateFacet    `json:"date_ranges,omitempty"`
-}
-
-// SearchResultStatus holds the status information for an executed search query.
-type SearchResultStatus struct {
-	Total      int `json:"total,omitempty"`
-	Failed     int `json:"failed,omitempty"`
-	Successful int `json:"successful,omitempty"`
-}
-
-// *VOLATILE*
-// SearchResults allows access to the results of a search query.
-type SearchResults interface {
-	Status() SearchResultStatus
-	Errors() []string
-	TotalHits() int
-	Hits() []SearchResultHit
-	Facets() map[string]SearchResultFacet
-	Took() time.Duration
-	MaxScore() float64
-}
-
-type searchResponse struct {
-	Status    SearchResultStatus           `json:"status,omitempty"`
-	Errors    []string                     `json:"errors,omitempty"`
-	TotalHits int                          `json:"total_hits,omitempty"`
-	Hits      []SearchResultHit            `json:"hits,omitempty"`
-	Facets    map[string]SearchResultFacet `json:"facets,omitempty"`
-	Took      uint                         `json:"took,omitempty"`
-	MaxScore  float64                      `json:"max_score,omitempty"`
-}
-
-type searchResults struct {
-	data *searchResponse
-}
-
-func (r searchResults) Status() SearchResultStatus {
-	return r.data.Status
-}
-func (r searchResults) Errors() []string {
-	return r.data.Errors
-}
-func (r searchResults) TotalHits() int {
-	return r.data.TotalHits
-}
-func (r searchResults) Hits() []SearchResultHit {
-	return r.data.Hits
-}
-func (r searchResults) Facets() map[string]SearchResultFacet {
-	return r.data.Facets
-}
-func (r searchResults) Took() time.Duration {
-	return time.Duration(r.data.Took) / time.Nanosecond
-}
-func (r searchResults) MaxScore() float64 {
-	return r.data.MaxScore
-}
-
-// Performs a spatial query and returns a list of rows or an error.
-func (c *Cluster) doSearchQuery(b *Bucket, q *SearchQuery) (SearchResults, error) {
-	var err error
-	var ftsEp string
-	var timeout time.Duration
-	var client *http.Client
-	var creds []userPassPair
-
-	if b != nil {
-		ftsEp, err = b.getFtsEp()
-		if err != nil {
-			return nil, err
-		}
-
-		if b.ftsTimeout < c.ftsTimeout {
-			timeout = b.ftsTimeout
-		} else {
-			timeout = c.ftsTimeout
-		}
-		client = b.client.HttpClient()
-		if c.auth != nil {
-			creds = c.auth.bucketFts(b.name)
-		} else {
-			creds = []userPassPair{
-				userPassPair{
-					Username: b.name,
-					Password: b.password,
-				},
-			}
-		}
-	} else {
-		if c.auth == nil {
-			panic("Cannot perform cluster level queries without Cluster Authenticator.")
-		}
-
-		tmpB, err := c.randomBucket()
-		if err != nil {
-			return nil, err
-		}
-
-		ftsEp, err = tmpB.getFtsEp()
-		if err != nil {
-			return nil, err
-		}
-
-		timeout = c.ftsTimeout
-		client = tmpB.client.HttpClient()
-		creds = c.auth.clusterFts()
-	}
-
-	qIndexName := q.indexName()
-	qBytes, err := json.Marshal(q.queryData())
-	if err != nil {
-		return nil, err
-	}
-
-	var queryData jsonx.DelayedObject
-	err = json.Unmarshal(qBytes, &queryData)
-	if err != nil {
-		return nil, err
-	}
-
-	var ctlData jsonx.DelayedObject
-	if queryData.Has("ctl") {
-		err = queryData.Get("ctl", &ctlData)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	qTimeout := jsonMillisecondDuration(timeout)
-	if ctlData.Has("timeout") {
-		err := ctlData.Get("timeout", &qTimeout)
-		if err != nil {
-			return nil, err
-		}
-		if qTimeout <= 0 || time.Duration(qTimeout) > timeout {
-			qTimeout = jsonMillisecondDuration(timeout)
-		}
-	}
-	ctlData.Set("timeout", qTimeout)
-
-	queryData.Set("ctl", ctlData)
-
-	if len(creds) > 1 {
-		queryData.Set("creds", creds)
-	}
-
-	qBytes, err = json.Marshal(queryData)
-	if err != nil {
-		return nil, err
-	}
-
-	reqUri := fmt.Sprintf("%s/api/index/%s/query", ftsEp, qIndexName)
-
-	req, err := http.NewRequest("POST", reqUri, bytes.NewBuffer(qBytes))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	if len(creds) == 1 {
-		req.SetBasicAuth(creds[0].Username, creds[0].Password)
-	}
-
-	resp, err := doHttpWithTimeout(client, req, timeout)
-	if err != nil {
-		return nil, err
-	}
-
-	ftsResp := searchResponse{}
-	jsonDec := json.NewDecoder(resp.Body)
-	err = jsonDec.Decode(&ftsResp)
-	if err != nil {
-		return nil, err
-	}
-
-	resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, &viewError{
-			Message: "HTTP Error",
-			Reason:  fmt.Sprintf("Status code was %d.", resp.StatusCode),
-		}
-	}
-
-	return searchResults{
-		data: &ftsResp,
-	}, nil
-}
-
-// *VOLATILE*
-// Performs a n1ql query and returns a list of rows or an error.
-func (c *Cluster) ExecuteSearchQuery(q *SearchQuery) (SearchResults, error) {
-	return c.doSearchQuery(nil, q)
 }

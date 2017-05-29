@@ -9,4 +9,5 @@ type IQuery interface {
 	GetObj(key string, obj proto.Message)
 	SetObj(key string, obj proto.Message, expiry uint32)
 	GenID(key string, start int64) int64
+	Del(key string)
 }

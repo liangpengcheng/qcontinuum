@@ -49,4 +49,5 @@ func TestQuery(t *testing.T) {
 	if getv != "keytest" {
 		t.Errorf("test failed,v(%s)", getv)
 	}
+	q.Del("keytest")
 }

@@ -7,4 +7,6 @@ var (
 	UserConnectionAgentKey = "userconnectionagentkey"
 	// UserPasswordHashKey 用户名密码的hash
 	UserPasswordHashKey = "userpasswordhashkey"
+	// ConnectionID 连接id号
+	ConnectionID = "connectionID"
 )

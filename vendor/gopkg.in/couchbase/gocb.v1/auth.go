@@ -5,14 +5,14 @@ type Authenticator interface {
 	clusterMgmt() userPassPair
 	clusterN1ql() []userPassPair
 	clusterFts() []userPassPair
-	bucketMemd(bucket string) string
+	bucketMemd(bucket string) userPassPair
 	bucketMgmt(bucket string) userPassPair
 	bucketViews(bucket string) userPassPair
 	bucketN1ql(bucket string) []userPassPair
 	bucketFts(bucket string) []userPassPair
 }
 
-// Provides a password for a single bucket.
+// BucketAuthenticator provides a password for a single bucket.
 type BucketAuthenticator struct {
 	Password string
 }
@@ -25,7 +25,7 @@ type userPassPair struct {
 // BucketAuthenticatorMap is a map of bucket name to BucketAuthenticator.
 type BucketAuthenticatorMap map[string]BucketAuthenticator
 
-// Authenticator which uses a list of buckets and passwords.
+// ClusterAuthenticator implements an Authenticator which uses a list of buckets and passwords.
 type ClusterAuthenticator struct {
 	Buckets  BucketAuthenticatorMap
 	Username string
@@ -62,8 +62,8 @@ func (ca ClusterAuthenticator) bucketAll(bucket string) userPassPair {
 	return userPassPair{"", ""}
 }
 
-func (ca ClusterAuthenticator) bucketMemd(bucket string) string {
-	return ca.bucketAll(bucket).Password
+func (ca ClusterAuthenticator) bucketMemd(bucket string) userPassPair {
+	return ca.bucketAll(bucket)
 }
 
 func (ca ClusterAuthenticator) bucketMgmt(bucket string) userPassPair {
@@ -83,5 +83,55 @@ func (ca ClusterAuthenticator) bucketN1ql(bucket string) []userPassPair {
 func (ca ClusterAuthenticator) bucketFts(bucket string) []userPassPair {
 	return []userPassPair{
 		ca.bucketAll(bucket),
+	}
+}
+
+// PasswordAuthenticator implements an Authenticator which uses an RBAC username and password.
+type PasswordAuthenticator struct {
+	Username string
+	Password string
+}
+
+func (ra PasswordAuthenticator) rbacAll() userPassPair {
+	return userPassPair{ra.Username, ra.Password}
+}
+
+func (ra PasswordAuthenticator) clusterMgmt() userPassPair {
+	return ra.rbacAll()
+}
+
+func (ra PasswordAuthenticator) clusterN1ql() []userPassPair {
+	return []userPassPair{
+		ra.rbacAll(),
+	}
+}
+
+func (ra PasswordAuthenticator) clusterFts() []userPassPair {
+	return []userPassPair{
+		ra.rbacAll(),
+	}
+}
+
+func (ra PasswordAuthenticator) bucketMemd(bucket string) userPassPair {
+	return ra.rbacAll()
+}
+
+func (ra PasswordAuthenticator) bucketMgmt(bucket string) userPassPair {
+	return ra.rbacAll()
+}
+
+func (ra PasswordAuthenticator) bucketViews(bucket string) userPassPair {
+	return ra.rbacAll()
+}
+
+func (ra PasswordAuthenticator) bucketN1ql(bucket string) []userPassPair {
+	return []userPassPair{
+		ra.rbacAll(),
+	}
+}
+
+func (ra PasswordAuthenticator) bucketFts(bucket string) []userPassPair {
+	return []userPassPair{
+		ra.rbacAll(),
 	}
 }

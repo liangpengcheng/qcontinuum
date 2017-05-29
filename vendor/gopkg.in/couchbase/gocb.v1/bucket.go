@@ -1,7 +1,7 @@
 package gocb
 
 import (
-	"gopkg.in/couchbase/gocbcore.v2"
+	"gopkg.in/couchbase/gocbcore.v7"
 	"math/rand"
 	"time"
 )
@@ -54,6 +54,16 @@ func createBucket(cluster *Cluster, config *gocbcore.AgentConfig) (*Bucket, erro
 	return bucket, nil
 }
 
+// Name returns the name of the bucket we are connected to.
+func (b *Bucket) Name() string {
+	return b.name
+}
+
+// UUID returns the uuid of the bucket we are connected to.
+func (b *Bucket) UUID() string {
+	return b.client.BucketUUID()
+}
+
 // OperationTimeout returns the maximum amount of time to wait for an operation to succeed.
 func (b *Bucket) OperationTimeout() time.Duration {
 	return b.opTimeout
@@ -84,12 +94,12 @@ func (b *Bucket) SetDurabilityTimeout(timeout time.Duration) {
 	b.duraTimeout = timeout
 }
 
-// SetDurabilityTimeout returns the amount of time waiting between durability polls.
+// DurabilityPollTimeout returns the amount of time waiting between durability polls.
 func (b *Bucket) DurabilityPollTimeout() time.Duration {
 	return b.duraPollTimeout
 }
 
-// SetDurabilityTimeout sets the amount of time waiting between durability polls.
+// SetDurabilityPollTimeout sets the amount of time waiting between durability polls.
 func (b *Bucket) SetDurabilityPollTimeout(timeout time.Duration) {
 	b.duraPollTimeout = timeout
 }
@@ -163,9 +173,9 @@ func (b *Bucket) getFtsEp() (string, error) {
 }
 
 // Close the instance’s underlying socket resources.  Note that operations pending on the connection may fail.
-func (b *Bucket) Close() {
+func (b *Bucket) Close() error {
 	b.cluster.closeBucket(b)
-	b.client.Close()
+	return b.client.Close()
 }
 
 // IoRouter returns the underlying gocb agent managing connections.
@@ -173,7 +183,6 @@ func (b *Bucket) IoRouter() *gocbcore.Agent {
 	return b.client
 }
 
-// *INTERNAL*
 // Internal methods, not safe to be consumed by third parties.
 func (b *Bucket) Internal() *BucketInternal {
 	return b.internal

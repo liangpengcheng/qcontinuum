@@ -8,10 +8,12 @@ import (
 type SearchHighlightStyle string
 
 const (
-	// DefaultHighlightStyl specifies to use the default to highlight search result hits.
+	// DefaultHighlightStyle specifies to use the default to highlight search result hits.
 	DefaultHighlightStyle = SearchHighlightStyle("")
+
 	// HtmlHighlightStyle specifies to use HTML tags to highlight search result hits.
 	HtmlHighlightStyle = SearchHighlightStyle("html")
+
 	// AnsiHightlightStyle specifies to use ANSI tags to highlight search result hits.
 	AnsiHightlightStyle = SearchHighlightStyle("ansi")
 )
@@ -35,13 +37,14 @@ type searchQueryData struct {
 	Explain   bool                      `json:"explain,omitempty"`
 	Highlight *searchQueryHighlightData `json:"highlight,omitempty"`
 	Fields    []string                  `json:"fields,omitempty"`
-	Sort      []string                  `json:"sort,omitempty"`
+	Sort      []interface{}             `json:"sort,omitempty"`
 	Facets    map[string]interface{}    `json:"facets,omitempty"`
 	Ctl       *searchQueryCtlData       `json:"ctl,omitempty"`
 }
 
-// *VOLATILE*
 // SearchQuery represents a pending search query.
+//
+// Experimental: This API is subject to change at any time.
 type SearchQuery struct {
 	name string
 	data searchQueryData
@@ -82,7 +85,7 @@ func (sq *SearchQuery) Fields(fields ...string) *SearchQuery {
 }
 
 // Sort specifies a sorting order for the results.  Only available in Couchbase Server 4.6+.
-func (sq *SearchQuery) Sort(fields ...string) *SearchQuery {
+func (sq *SearchQuery) Sort(fields ...interface{}) *SearchQuery {
 	sq.data.Sort = fields
 	return sq
 }
@@ -150,8 +153,9 @@ func (sq *SearchQuery) queryData() interface{} {
 	return sq.data
 }
 
-// *VOLATILE*
 // NewSearchQuery creates a new SearchQuery object from an index name and query.
+//
+// Experimental: This API is subject to change at any time.
 func NewSearchQuery(indexName string, query interface{}) *SearchQuery {
 	q := &SearchQuery{
 		name: indexName,

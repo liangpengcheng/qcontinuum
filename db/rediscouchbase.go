@@ -52,7 +52,7 @@ func (rc *rediscouchbaseQuery) GenID(key string, start int64) int64 {
 	}
 	counter, _, err := rc.couchNode.bucket.Counter(key, 1, 0, 0)
 	if err != nil {
-		base.LogError("GenID (%s) Error ", key)
+		base.LogError("GenID (%s) Error (%s) ", key, err.Error())
 		return -1
 	}
 	conn.Do("set", key, counter)
@@ -73,6 +73,19 @@ func (rc *rediscouchbaseQuery) SetObj(key string, obj proto.Message, expiry uint
 		return
 	}
 	rc.Set(key, b, expiry)
+}
+func (rc *rediscouchbaseQuery) Del(key string) {
+	conn := rc.node.GetRedis()
+	defer rc.node.Put(conn)
+	conn.Do("del", key)
+	//var str string
+	//cas, error := rc.couchNode.bucket.GetAndLock(key, 1024, &str)
+	//for error != nil {
+	//cas, error = rc.couchNode.bucket.GetAndLock(key, 1024, &str)
+	//}
+	// pass zero no cas check
+	rc.couchNode.bucket.Remove(key, 0)
+	//rc.couchNode.bucket.Unlock(key, cas)
 }
 
 // NewRedisCouchbaseQuery 新建一个组合

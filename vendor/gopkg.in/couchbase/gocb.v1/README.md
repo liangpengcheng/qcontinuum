@@ -34,12 +34,12 @@ around in [couchbase/discuss on gitter.im](https://gitter.im/couchbase/discuss)
 
 To install the latest stable version, run:
 ```bash
-go get gopkg.in/couchbaselabs/gocb.v1
+go get gopkg.in/couchbase/gocb.v1
 ```
 
 To install the latest developer version, run:
 ```bash
-go get github.com/couchbaselabs/gocb
+go get github.com/couchbase/gocb
 ```
 
 
@@ -49,5 +49,5 @@ Copyright 2016 Couchbase Inc.
 Licensed under the Apache License, Version 2.0.
 
 See
-[LICENSE](https://github.com/couchbase/couchnode/blob/master/LICENSE)
+[LICENSE](https://github.com/couchbase/gocb/blob/master/LICENSE)
 for further details.

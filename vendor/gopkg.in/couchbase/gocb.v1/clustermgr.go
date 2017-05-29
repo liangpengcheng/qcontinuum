@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // ClusterManager provides methods for performing cluster management operations.
@@ -28,6 +29,9 @@ const (
 
 	// Memcached indicates a Memcached bucket type.
 	Memcached = BucketType(1)
+
+	// Ephemeral indicates an Ephemeral bucket type.
+	Ephemeral = BucketType(2)
 )
 
 type bucketDataIn struct {
@@ -92,6 +96,8 @@ func bucketDataInToSettings(bucketData *bucketDataIn) *BucketSettings {
 		settings.Type = Couchbase
 	} else if bucketData.BucketType == "memcached" {
 		settings.Type = Memcached
+	} else if bucketData.BucketType == "ephemeral" {
+		settings.Type = Ephemeral
 	} else {
 		panic("Unrecognized bucket type string.")
 	}
@@ -113,7 +119,10 @@ func (cm *ClusterManager) GetBuckets() ([]*BucketSettings, error) {
 		if err != nil {
 			return nil, err
 		}
-		resp.Body.Close()
+		err = resp.Body.Close()
+		if err != nil {
+			logDebugf("Failed to close socket (%s)", err)
+		}
 		return nil, clientError{string(data)}
 	}
 
@@ -140,6 +149,8 @@ func (cm *ClusterManager) InsertBucket(settings *BucketSettings) error {
 		posts.Add("bucketType", "couchbase")
 	} else if settings.Type == Memcached {
 		posts.Add("bucketType", "memcached")
+	} else if settings.Type == Ephemeral {
+		posts.Add("bucketType", "ephemeral")
 	} else {
 		panic("Unrecognized bucket type.")
 	}
@@ -152,12 +163,11 @@ func (cm *ClusterManager) InsertBucket(settings *BucketSettings) error {
 	posts.Add("authType", "sasl")
 	posts.Add("saslPassword", settings.Password)
 	posts.Add("ramQuotaMB", fmt.Sprintf("%d", settings.Quota))
-	posts.Add("proxyPort", "11210")
 
 	data := []byte(posts.Encode())
 	resp, err := cm.mgmtRequest("POST", "/pools/default/buckets", "application/x-www-form-urlencoded", bytes.NewReader(data))
 	if err != nil {
-		return nil
+		return err
 	}
 
 	if resp.StatusCode != 202 {
@@ -165,7 +175,10 @@ func (cm *ClusterManager) InsertBucket(settings *BucketSettings) error {
 		if err != nil {
 			return err
 		}
-		resp.Body.Close()
+		err = resp.Body.Close()
+		if err != nil {
+			logDebugf("Failed to close socket (%s)", err)
+		}
 		return clientError{string(data)}
 	}
 
@@ -192,7 +205,150 @@ func (cm *ClusterManager) RemoveBucket(name string) error {
 		if err != nil {
 			return err
 		}
-		resp.Body.Close()
+		err = resp.Body.Close()
+		if err != nil {
+			logDebugf("Failed to close socket (%s)", err)
+		}
+		return clientError{string(data)}
+	}
+
+	return nil
+}
+
+// UserRole represents a role for a particular user on the server.
+type UserRole struct {
+	Role       string
+	BucketName string
+}
+
+// User represents a user which was retrieved from the server.
+type User struct {
+	Id    string
+	Name  string
+	Type  string
+	Roles []UserRole
+}
+
+// UserSettings represents a user during user creation.
+type UserSettings struct {
+	Name     string
+	Password string
+	Roles    []UserRole
+}
+
+type userRoleJson struct {
+	Role       string `json:"role"`
+	BucketName string `json:"bucket_name"`
+}
+
+type userJson struct {
+	Id    string         `json:"id"`
+	Name  string         `json:"name"`
+	Type  string         `json:"type"`
+	Roles []userRoleJson `json:"roles"`
+}
+
+type userSettingsJson struct {
+	Name     string         `json:"name"`
+	Password string         `json:"password"`
+	Roles    []userRoleJson `json:"roles"`
+}
+
+// GetUsers returns a list of all users on the cluster.
+func (cm *ClusterManager) GetUsers() ([]*User, error) {
+	resp, err := cm.mgmtRequest("GET", "/settings/rbac/users", "", nil)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		data, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		err = resp.Body.Close()
+		if err != nil {
+			logDebugf("Failed to close socket (%s)", err)
+		}
+		return nil, clientError{string(data)}
+	}
+
+	var usersData []*userJson
+	jsonDec := json.NewDecoder(resp.Body)
+	err = jsonDec.Decode(&usersData)
+	if err != nil {
+		return nil, err
+	}
+
+	var users []*User
+	for _, userData := range usersData {
+		var user User
+		user.Id = userData.Id
+		user.Name = userData.Name
+		user.Type = userData.Type
+		for _, roleData := range userData.Roles {
+			user.Roles = append(user.Roles, UserRole{
+				Role:       roleData.Role,
+				BucketName: roleData.BucketName,
+			})
+		}
+		users = append(users, &user)
+	}
+
+	return users, nil
+}
+
+// UpsertUser updates a built-in RBAC user on the cluster.
+func (cm *ClusterManager) UpsertUser(name string, settings *UserSettings) error {
+	var reqRoleStrs []string
+	for _, roleData := range settings.Roles {
+		reqRoleStrs = append(reqRoleStrs, fmt.Sprintf("%s[%s]", roleData.Role, roleData.BucketName))
+	}
+
+	reqForm := make(url.Values)
+	reqForm.Add("name", settings.Name)
+	reqForm.Add("password", settings.Password)
+	reqForm.Add("roles", strings.Join(reqRoleStrs, ","))
+
+	uri := fmt.Sprintf("/settings/rbac/users/local/%s", name)
+	reqBody := bytes.NewReader([]byte(reqForm.Encode()))
+	resp, err := cm.mgmtRequest("PUT", uri, "application/x-www-form-urlencoded", reqBody)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		data, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		err = resp.Body.Close()
+		if err != nil {
+			logDebugf("Failed to close socket (%s)", err)
+		}
+		return clientError{string(data)}
+	}
+
+	return nil
+}
+
+// RemoveUser removes a built-in RBAC user on the cluster.
+func (cm *ClusterManager) RemoveUser(name string) error {
+	uri := fmt.Sprintf("/settings/rbac/users/local/%s", name)
+	resp, err := cm.mgmtRequest("DELETE", uri, "", nil)
+	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		data, err := ioutil.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		err = resp.Body.Close()
+		if err != nil {
+			logDebugf("Failed to close socket (%s)", err)
+		}
 		return clientError{string(data)}
 	}
 
