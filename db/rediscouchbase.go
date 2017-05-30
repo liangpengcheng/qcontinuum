@@ -88,6 +88,8 @@ func (rc *rediscouchbaseQuery) Del(key string) {
 	//rc.couchNode.bucket.Unlock(key, cas)
 }
 func (rc *rediscouchbaseQuery) GetHash(hashkey string, key string, valuePtr interface{}) {
+	conn := rc.node.GetRedis()
+	defer rc.node.Put(conn)
 
 }
 func (rc *rediscouchbaseQuery) SetHash(hashkey string, key string, value interface{}) {

@@ -56,6 +56,9 @@ func (node *RedisNode) GetRedis() redis.Conn {
 func (node *RedisNode) Put(conn redis.Conn) {
 	conn.Close()
 }
+func GetHashInterfacePtr(conn redis.Conn, hkey string, key string, valuePtr interface{}) {
+
+}
 
 // GetInterfacePtr 泛型获得,没有这个key的时候也返回error
 func GetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) error {
