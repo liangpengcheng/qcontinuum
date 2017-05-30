@@ -87,6 +87,12 @@ func (rc *rediscouchbaseQuery) Del(key string) {
 	rc.couchNode.bucket.Remove(key, 0)
 	//rc.couchNode.bucket.Unlock(key, cas)
 }
+func (rc *rediscouchbaseQuery) GetHash(hashkey string, key string, valuePtr interface{}) {
+
+}
+func (rc *rediscouchbaseQuery) SetHash(hashkey string, key string, value interface{}) {
+
+}
 
 // NewRedisCouchbaseQuery 新建一个组合
 func NewRedisCouchbaseQuery(rnode *RedisNode, cbnode *CouchbaseCluster) IQuery {
