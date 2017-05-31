@@ -90,6 +90,14 @@ func (rc *rediscouchbaseQuery) Del(key string) {
 func (rc *rediscouchbaseQuery) GetHash(hashkey string, key string, valuePtr interface{}) {
 	conn := rc.node.GetRedis()
 	defer rc.node.Put(conn)
+	err := GetHashInterfacePtr(conn, hashkey, key, valuePtr)
+	if err == nil {
+		return
+	}
+	//从couchbase读取
+	//var retstr string
+	rc.couchNode.bucket.Get(key, valuePtr)
+	SetHashInterfacePtr(conn, hashkey, key, valuePtr)
 
 }
 func (rc *rediscouchbaseQuery) SetHash(hashkey string, key string, value interface{}) {
