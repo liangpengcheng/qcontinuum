@@ -96,12 +96,68 @@ func (rc *rediscouchbaseQuery) GetHash(hashkey string, key string, valuePtr inte
 	}
 	//从couchbase读取
 	//var retstr string
-	rc.couchNode.bucket.Get(key, valuePtr)
+	rc.couchNode.bucket.MapGet(key, hashkey, valuePtr)
 	SetHashInterfacePtr(conn, hashkey, key, valuePtr)
-
 }
 func (rc *rediscouchbaseQuery) SetHash(hashkey string, key string, value interface{}) {
+	conn := rc.node.GetRedis()
+	defer rc.node.Put(conn)
+	conn.Do("hset", hashkey, key, value)
+	//设置couchbase
+	go func() {
+		_, err := MapUpser(rc.couchNode.bucket, hashkey, key, value, true)
+		if err != nil {
+			base.LogPanic("set hash couchbase error %s", err.Error())
+		}
+	}()
 
+}
+func (rc *rediscouchbaseQuery) Exists(key string) bool {
+	conn := rc.node.GetRedis()
+	defer rc.node.Put(conn)
+	exist, error := redis.Bool(conn.Do("exists", key))
+	if exist && error == nil {
+		return true
+	}
+	var ret interface{}
+	_, err := rc.couchNode.bucket.Get(key, &ret)
+	if ret != nil && err == nil {
+		return true
+	}
+	return false
+}
+func (rc *rediscouchbaseQuery) HExists(hashKey, key string) bool {
+	conn := rc.node.GetRedis()
+	defer rc.node.Put(conn)
+	exist, error := redis.Bool(conn.Do("hexists", hashKey, key))
+	if exist && error == nil {
+		return true
+	}
+	var ret interface{}
+	_, err := rc.couchNode.bucket.MapGet(hashKey, key, &ret)
+	if ret != nil && err == nil {
+		return true
+	}
+	return false
+}
+func (rc *rediscouchbaseQuery) HashDel(hashKey, key string) {
+	conn := rc.node.GetRedis()
+	defer rc.node.Put(conn)
+	conn.Do("hdel", hashKey, key)
+	rc.couchNode.bucket.MapRemove(hashKey, key)
+}
+func (rc *rediscouchbaseQuery) HLen(hashKey string) uint {
+	conn := rc.node.GetRedis()
+	defer rc.node.Put(conn)
+	res, err := conn.Do("hlen", hashKey)
+	if err == nil {
+		len, err := redis.Int(res, err)
+		if len != 0 && err == nil {
+			return uint(len)
+		}
+	}
+	len, _, _ := rc.couchNode.bucket.MapSize(hashKey)
+	return len
 }
 
 // NewRedisCouchbaseQuery 新建一个组合

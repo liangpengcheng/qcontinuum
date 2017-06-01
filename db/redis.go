@@ -70,6 +70,11 @@ func GetHashInterfacePtr(conn redis.Conn, hkey string, key string, valuePtr inte
 		case *int:
 			*out, formaterr = redis.Int(ret, err)
 			break
+		case *int32:
+			var ret32 int
+			ret32, formaterr = redis.Int(ret, err)
+			*out = int32(ret32)
+			break
 		case *int64:
 			*out, formaterr = redis.Int64(ret, err)
 			break
@@ -112,6 +117,11 @@ func GetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) error {
 		case *int:
 			*out, formaterr = redis.Int(ret, err)
 			break
+		case *int32:
+			var ret32 int
+			ret32, formaterr = redis.Int(ret, err)
+			*out = int32(ret32)
+			break
 		case *int64:
 			*out, formaterr = redis.Int64(ret, err)
 			break
@@ -145,6 +155,8 @@ func SetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) {
 	switch out := valuePtr.(type) {
 	case *int:
 		conn.Do("set", key, *out)
+	case *int32:
+		conn.Do("set", key, *out)
 	case *int64:
 		conn.Do("set", key, *out)
 	case *float32:
@@ -168,6 +180,8 @@ func SetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) {
 func SetHashInterfacePtr(conn redis.Conn, hashKey string, key string, valuePtr interface{}) {
 	switch out := valuePtr.(type) {
 	case *int:
+		conn.Do("hset", hashKey, key, *out)
+	case *int32:
 		conn.Do("hset", hashKey, key, *out)
 	case *int64:
 		conn.Do("hset", hashKey, key, *out)

@@ -43,11 +43,37 @@ func TestQuery(t *testing.T) {
 		t.Errorf("test failed,v(%s)", getv)
 	}
 	r.Do("del", "keytest")
-	rn.Put(r)
 	//测试缓存失效的情况
 	q.Get("keytest", &getv)
 	if getv != "keytest" {
 		t.Errorf("test failed,v(%s)", getv)
 	}
 	q.Del("keytest")
+
+	q.SetHash("hashTest", "v1", int32(1024))
+	var hval int32
+	q.GetHash("hashTest", "v1", &hval)
+	if hval != 1024 {
+		t.Error("hash test failed")
+	}
+	if !q.HExists("hashTest", "v1") {
+		t.Error("hash exists failed")
+	}
+	r.Do("hdel", "hashTest", "v1")
+
+	q.GetHash("hashTest", "v1", &hval)
+	if hval != 1024 {
+		t.Error("hash test failed")
+	}
+	if !q.HExists("hashTest", "v1") {
+		t.Error("hash exists failed")
+	}
+	q.SetHash("hashTest", "v1", "notval")
+	q.HashDel("hashTest", "v1")
+	if q.HExists("hashTest", "v1") {
+		t.Error("hash exists failed")
+	}
+	q.SetHash("hashTest", "v2", "wahaha")
+	q.SetHash("hashTest", "v1", "reset")
+	rn.Put(r)
 }
