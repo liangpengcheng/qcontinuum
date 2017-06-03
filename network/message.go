@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-	"net"
 )
 
 var maxMessageLength = 4096
@@ -29,7 +28,7 @@ func ReadHead(src []byte) MessageHead {
 }
 
 // ReadFromConnect 读取消息
-func ReadFromConnect(conn net.Conn, length int) ([]byte, error) {
+func ReadFromConnect(conn io.Reader, length int) ([]byte, error) {
 	data := make([]byte, length)
 	len, err := io.ReadFull(conn, data)
 	if err == nil && len == length {

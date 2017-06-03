@@ -2,6 +2,7 @@ package network
 
 import (
 	"errors"
+	"io"
 	"log"
 	"net"
 
@@ -30,16 +31,14 @@ func NewTCP4Server(bindAddress string) (*Server, error) {
 }
 
 // ReadMessage read a message from connection ,blocked
-func ReadMessage(conn net.Conn) (*MessageHead, []byte, error) {
+func ReadMessage(conn io.Reader) (*MessageHead, []byte, error) {
 	buffer, err := ReadFromConnect(conn, 8)
 	if err != nil {
-
 		return nil, nil, err
 	}
 	h := ReadHead(buffer)
 	if h.ID > 1024 || h.Length < 0 {
 		log.Printf("message error: id(%d),len(%d)", h.ID, h.Length)
-		conn.Close()
 		return nil, nil, errors.New("message not in range")
 	}
 	buffer, err = ReadFromConnect(conn, int(h.Length))

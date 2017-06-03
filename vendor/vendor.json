@@ -33,6 +33,16 @@
 			"revisionTime": "2017-06-02T14:42:09Z"
 		},
 		{
+			"checksumSHA1": "YoSf+PgTWvHmFVaF3MrtZz3kX38=",
+			"path": "golang.org/x/net/internal/iana",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "MK02j4R5BV6iDQPq9tmzhfYm8CQ=",
+			"path": "golang.org/x/net/internal/socket",
+			"revision": ""
+		},
+		{
 			"checksumSHA1": "MRY6A1goII7dRrXn9BOkRXHMvA0=",
 			"path": "golang.org/x/net/ipv4",
 			"revision": ""

@@ -30,7 +30,7 @@ func (peer *ClientPeer) ConnectionHandler(proc *Processor) {
 		h, buffer, err := ReadMessage(peer.Connection)
 		if err != nil {
 			base.LogInfo("socket read error %s,%s", peer.Connection.RemoteAddr().String(), err.Error())
-
+			peer.Connection.Close()
 			break
 		}
 		msg := &Message{
