@@ -27,6 +27,22 @@
 			"revisionTime": "2016-11-17T03:31:26Z"
 		},
 		{
+			"checksumSHA1": "4L4JhAuKJe7e/kQAgldh2egENzk=",
+			"path": "github.com/xtaci/kcp-go",
+			"revision": "33fba26c6c3e4aa92fcc81d4eed6e3e1f82b134d",
+			"revisionTime": "2017-06-02T14:42:09Z"
+		},
+		{
+			"checksumSHA1": "MRY6A1goII7dRrXn9BOkRXHMvA0=",
+			"path": "golang.org/x/net/ipv4",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "3vIDRtgcBz6m/rGO8WfejDcpV1g=",
+			"path": "golang.org/x/net/ipv6",
+			"revision": ""
+		},
+		{
 			"checksumSHA1": "+iR8e+zk4M5L65XvF7eOY8nR2cM=",
 			"path": "gopkg.in/brett19/jsonx.v1",
 			"revision": "5b7baa20429a46a5543ee259664cc86502738cad",
