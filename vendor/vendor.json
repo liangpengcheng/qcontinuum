@@ -27,10 +27,38 @@
 			"revisionTime": "2016-11-17T03:31:26Z"
 		},
 		{
+			"checksumSHA1": "iNjI1ej9tFimwOFQXpK3V7DiJ2Q=",
+			"path": "github.com/klauspost/cpuid",
+			"revision": "09cded8978dc9e80714c4d85b0322337b0a1e5e0",
+			"revisionTime": "2016-03-02T07:53:16Z"
+		},
+		{
+			"path": "github.com/klauspost/reedsolomo",
+			"revision": ""
+		},
+		{
+			"checksumSHA1": "aHnSYySLNvbqYn+IPKB7tKxzf2A=",
+			"path": "github.com/klauspost/reedsolomon",
+			"revision": "dde6ad55c5e5a6379a4e82dcca32ee407346eb6d",
+			"revisionTime": "2017-05-28T10:38:06Z"
+		},
+		{
 			"checksumSHA1": "4L4JhAuKJe7e/kQAgldh2egENzk=",
 			"path": "github.com/xtaci/kcp-go",
 			"revision": "33fba26c6c3e4aa92fcc81d4eed6e3e1f82b134d",
 			"revisionTime": "2017-06-02T14:42:09Z"
+		},
+		{
+			"checksumSHA1": "JsJdKXhz87gWenMwBeejTOeNE7k=",
+			"path": "golang.org/x/crypto/blowfish",
+			"revision": "e1a4589e7d3ea14a3352255d04b6f1a418845e5e",
+			"revisionTime": "2017-05-23T23:42:09Z"
+		},
+		{
+			"checksumSHA1": "Bw4d+hzVikcYeeCkYDEqiOOYWoU=",
+			"path": "golang.org/x/net/bpf",
+			"revision": "e4fa1c5465ad6111f206fc92186b8c83d64adbe1",
+			"revisionTime": "2017-06-02T19:04:32Z"
 		},
 		{
 			"checksumSHA1": "YoSf+PgTWvHmFVaF3MrtZz3kX38=",

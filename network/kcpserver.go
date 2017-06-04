@@ -9,6 +9,25 @@ import (
 type KcpServer struct {
 	Listener *kcp.Listener
 }
+type kcpPeer struct {
+	Connection *kcp.UDPSession
+}
+
+func (kcp kcpPeer) GetRemoteAddr() string {
+	if kcp.Connection != nil {
+		return kcp.Connection.RemoteAddr().String()
+	}
+	return "not connect"
+}
+func (kcp kcpPeer) Read(buf []byte) (int, error) {
+	return kcp.Connection.Read(buf)
+}
+func (kcp kcpPeer) Write(buf []byte) (int, error) {
+	return kcp.Connection.Write(buf)
+}
+func (kcp kcpPeer) Close() {
+	kcp.Connection.Close()
+}
 
 func newBlockServer(host string) (*KcpServer, error) {
 	crpy, _ := kcp.NewNoneBlockCrypt(nil)
@@ -48,10 +67,13 @@ func (s *KcpServer) BlockAccept(proc *Processor) {
 			conn.SetMtu(1400)
 			conn.SetWindowSize(2048, 2048)
 			conn.SetACKNoDelay(true)
-			kcppeer := &KcpPeer{
-				Connection: conn,
+			peer := &ClientPeer{
+				Connection: kcpPeer{
+					Connection: conn,
+				},
 			}
-			go kcppeer.ConnectionHandle(proc)
+
+			go peer.ConnectionHandler(proc)
 		}
 	}
 }

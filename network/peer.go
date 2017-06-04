@@ -1,16 +1,23 @@
 package network
 
 import (
-	"net"
-
 	"fmt"
+
+	"io"
 
 	"github.com/liangpengcheng/qcontinuum/base"
 )
 
+// Peer 链接节点
+type Peer interface {
+	io.ReadWriter
+	GetRemoteAddr() string
+	Close()
+}
+
 //ClientPeer client connection peer
 type ClientPeer struct {
-	Connection net.Conn
+	Connection Peer
 	Serv       *Server
 	Flag       int32
 }
@@ -29,8 +36,9 @@ func (peer *ClientPeer) ConnectionHandler(proc *Processor) {
 	for {
 		h, buffer, err := ReadMessage(peer.Connection)
 		if err != nil {
-			base.LogInfo("socket read error %s,%s", peer.Connection.RemoteAddr().String(), err.Error())
-			peer.Connection.Close()
+			//base.LogInfo("socket read error %s,%s", peer.Connection.RemoteAddr().String(), err.Error())
+			//peer.Connection.Close()
+			peer.Connection = nil
 			break
 		}
 		msg := &Message{
@@ -52,5 +60,5 @@ func (peer *ClientPeer) ConnectionHandler(proc *Processor) {
 		Peer: peer,
 	}
 	proc.EventChan <- event
-	base.LogInfo("disconnect %s", peer.Connection.RemoteAddr().String())
+	//base.LogInfo("disconnect %s", peer.Connection.RemoteAddr().String())
 }

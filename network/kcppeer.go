@@ -1,5 +1,6 @@
 package network
 
+/*
 import (
 	"fmt"
 
@@ -53,3 +54,4 @@ func (peer *KcpPeer) ConnectionHandle(proc *Processor) {
 	proc.EventChan <- event
 	base.LogInfo("disconnect %s", peer.Connection.RemoteAddr().String())
 }
+*/
