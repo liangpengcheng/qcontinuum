@@ -39,7 +39,7 @@ func NewKCPServer(host string) (*KcpServer, error) {
 func (s *KcpServer) BlockAccept(proc *Processor) {
 	for {
 		if conn, err := s.Listener.AcceptKCP(); err == nil {
-			base.LogInfo("remote address:", conn.RemoteAddr().String())
+			base.LogInfo("remote address:%s", conn.RemoteAddr().String())
 			conn.SetStreamMode(true)
 			conn.SetWriteDelay(true)
 			// 这个参数需要好好研究
