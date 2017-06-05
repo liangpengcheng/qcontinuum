@@ -13,27 +13,6 @@ import (
 type Server struct {
 	Listener *net.TCPListener
 }
-type tcpPeer struct {
-	Connection net.Conn
-}
-
-func (tcp tcpPeer) GetRemoteAddr() string {
-	if tcp.Connection != nil {
-		return tcp.Connection.RemoteAddr().String()
-	}
-	return "not connect"
-}
-func (tcp tcpPeer) Read(buf []byte) (int, error) {
-	return tcp.Connection.Read(buf)
-}
-func (tcp tcpPeer) Write(buf []byte) (int, error) {
-	return tcp.Connection.Write(buf)
-}
-func (tcp tcpPeer) Close() {
-	if tcp.Connection != nil {
-		tcp.Connection.Close()
-	}
-}
 
 // NewTCP4Server new tcp server
 func NewTCP4Server(bindAddress string) (*Server, error) {
@@ -79,9 +58,7 @@ func (s *Server) BlockAccept(proc *Processor) {
 			if err == nil {
 				base.LogDebug("incomming connection :%s", conn.RemoteAddr().String())
 				peer := &ClientPeer{
-					Connection: tcpPeer{
-						Connection: conn,
-					},
+					Connection: conn,
 				}
 				event := &Event{
 					ID:   AddEvent,

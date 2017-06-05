@@ -3,21 +3,14 @@ package network
 import (
 	"fmt"
 
-	"io"
+	"net"
 
 	"github.com/liangpengcheng/qcontinuum/base"
 )
 
-// Peer 链接节点
-type Peer interface {
-	io.ReadWriter
-	GetRemoteAddr() string
-	Close()
-}
-
 //ClientPeer client connection peer
 type ClientPeer struct {
-	Connection Peer
+	Connection net.Conn
 	Serv       *Server
 	Flag       int32
 }
