@@ -65,7 +65,7 @@ func (s *Server) BlockAccept(proc *Processor) {
 					Peer: peer,
 				}
 				proc.EventChan <- event
-				go peer.ConnectionHandler(proc)
+				go peer.ConnectionHandler()
 			} else {
 				base.LogError("accept error :%s", err.Error())
 				break
@@ -74,5 +74,32 @@ func (s *Server) BlockAccept(proc *Processor) {
 
 	} else {
 		base.LogError("create listener first")
+	}
+}
+
+// BlockAcceptOne 接受一个连接
+func (s *Server) BlockAcceptOne(proc *Processor) {
+	if s.Listener != nil {
+		for {
+			conn, err := s.Listener.Accept()
+			if err == nil {
+				base.LogDebug("incomming connection :%s", conn.RemoteAddr().String())
+				peer := &ClientPeer{
+					Connection:   conn,
+					RedirectProc: make(chan *Processor, 1),
+					Proc:         proc,
+				}
+				event := &Event{
+					ID:   AddEvent,
+					Peer: peer,
+				}
+				proc.EventChan <- event
+				go peer.ConnectionHandler()
+			} else {
+				base.LogError("accept error :%s", err.Error())
+				break
+			}
+		}
+
 	}
 }

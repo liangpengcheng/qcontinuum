@@ -1,7 +1,6 @@
 package network
 
 import (
-	"github.com/golang/protobuf/proto"
 	"github.com/liangpengcheng/qcontinuum/base"
 )
 
@@ -10,6 +9,9 @@ type MsgCallback func(msg *Message)
 
 // EventCallback 时间处理
 type EventCallback func(event *Event)
+
+// ProcFunction 回掉的程序
+type ProcFunction func()
 
 // Message 消息链
 type Message struct {
@@ -38,6 +40,7 @@ var (
 type Processor struct {
 	MessageChan   chan *Message
 	EventChan     chan *Event
+	FuncChan      chan ProcFunction
 	CallbackMap   map[int32]MsgCallback
 	EventCallback map[int32]EventCallback
 	// ImmediateMode 立即回调消息，如果想要线程安全，必须设置为false，默认为false
@@ -49,6 +52,7 @@ func NewProcessor() *Processor {
 	p := &Processor{
 		MessageChan:   make(chan *Message, 1024),
 		EventChan:     make(chan *Event, 1024),
+		FuncChan:      make(chan ProcFunction, 64),
 		EventCallback: make(map[int32]EventCallback),
 		CallbackMap:   make(map[int32]MsgCallback),
 		ImmediateMode: false,
@@ -62,13 +66,9 @@ func (p *Processor) addCallback(id int32, callback MsgCallback) {
 }
 
 // AddCallback 设置回调
-func (p *Processor) AddCallback(m proto.Message, callback MsgCallback) {
-	tname := proto.MessageName(m)
-	id := proto.EnumValueMap(tname + "_MsgID")["ID"]
+func (p *Processor) AddCallback(id int32, callback MsgCallback) {
 	if id != 0 {
 		p.addCallback(id, callback)
-	} else {
-		base.LogError("can't find message %s", tname)
 	}
 }
 
@@ -108,7 +108,8 @@ func (p *Processor) StartProcess() {
 			if cb, ok := p.EventCallback[event.ID]; ok {
 				cb(event)
 			}
-
+		case f := <-p.FuncChan:
+			f()
 		}
 
 	}

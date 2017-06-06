@@ -43,19 +43,40 @@ func (s *KcpServer) BlockAccept(proc *Processor) {
 			conn.SetStreamMode(true)
 			conn.SetWriteDelay(true)
 			// 这个参数需要好好研究
-			conn.SetNoDelay(1, 50, 0, 1)
+			conn.SetNoDelay(1, 50, 1, 0)
 			conn.SetMtu(1400)
 			conn.SetWindowSize(2048, 2048)
 			conn.SetACKNoDelay(true)
 			peer := &ClientPeer{
-				Connection: conn,
+				Connection:   conn,
+				RedirectProc: make(chan *Processor, 1),
+				Proc:         proc,
 			}
 
-			go peer.ConnectionHandler(proc)
+			go peer.ConnectionHandler()
 		} else {
 			base.LogError("accept error :%s", err.Error())
 			break
 		}
 	}
 	base.LogInfo("exit accept")
+}
+
+// BlockAcceptOne 接受一个连接
+func (s *KcpServer) BlockAcceptOne(proc *Processor) {
+	if conn, err := s.Listener.AcceptKCP(); err == nil {
+		base.LogInfo("remote address:%s", conn.RemoteAddr().String())
+		conn.SetStreamMode(true)
+		conn.SetWriteDelay(true)
+		// 这个参数需要好好研究
+		conn.SetNoDelay(1, 50, 1, 0)
+		conn.SetMtu(1400)
+		conn.SetWindowSize(2048, 2048)
+		conn.SetACKNoDelay(true)
+		peer := &ClientPeer{
+			Connection: conn,
+		}
+
+		go peer.ConnectionHandler()
+	}
 }
