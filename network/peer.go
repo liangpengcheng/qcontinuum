@@ -5,6 +5,7 @@ import (
 
 	"net"
 
+	"github.com/golang/protobuf/proto"
 	"github.com/liangpengcheng/qcontinuum/base"
 )
 
@@ -15,6 +16,15 @@ type ClientPeer struct {
 	Flag         int32
 	RedirectProc chan *Processor
 	Proc         *Processor
+}
+
+// SendMessage send a message to peer
+func (peer *ClientPeer) SendMessage(msg proto.Message) error {
+	buf, err := proto.Marshal(msg)
+	if err == nil {
+		peer.Connection.Write(buf)
+	}
+	return err
 }
 
 // ConnectionHandler read messages here
