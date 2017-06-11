@@ -1,6 +1,8 @@
 package network
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 
 	"net"
@@ -19,12 +21,28 @@ type ClientPeer struct {
 }
 
 // SendMessage send a message to peer
-func (peer *ClientPeer) SendMessage(msg proto.Message) error {
+func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
+	length := int32(proto.Size(msg))
+	bufhead := bytes.NewBuffer([]byte{})
+	//buf := Base.BufferPoolGet()
+	//defer Base.BufferPoolPut(buf)
+	binary.Write(bufhead, binary.LittleEndian, length)
+	binary.Write(bufhead, binary.LittleEndian, msgid)
 	buf, err := proto.Marshal(msg)
 	if err == nil {
-		peer.Connection.Write(buf)
+		allbuf := base.BytesCombine(bufhead.Bytes(), buf)
+		peer.Connection.Write(allbuf)
 	}
 	return err
+}
+
+// TransmitMsg 转发消息
+func (peer *ClientPeer) TransmitMsg(msg *Message) {
+	bufhead := bytes.NewBuffer([]byte{})
+	binary.Write(bufhead, binary.LittleEndian, msg.Head.Length)
+	binary.Write(bufhead, binary.LittleEndian, msg.Head.ID)
+	allbuf := base.BytesCombine(bufhead.Bytes(), msg.Body)
+	peer.Connection.Write(allbuf)
 }
 
 // ConnectionHandler read messages here

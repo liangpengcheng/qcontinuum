@@ -1,6 +1,7 @@
 package base
 
 import (
+	"bytes"
 	"math/rand"
 	"reflect"
 	"time"
@@ -47,4 +48,9 @@ func Bytes(s string) (b []byte) {
 	pbytes.Cap = pstring.Len
 
 	return
+}
+
+// BytesCombine 拼接[]byte
+func BytesCombine(pBytes ...[]byte) []byte {
+	return bytes.Join(pBytes, []byte(""))
 }
