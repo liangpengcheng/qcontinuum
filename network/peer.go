@@ -32,10 +32,13 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 	buf, err := proto.Marshal(msg)
 	if err == nil {
 		allbuf := base.BytesCombine(bufhead.Bytes(), buf)
-		peer.Proc.SendChan <- &Message{
-			Peer: peer,
-			Body: allbuf,
-		}
+		/*
+			peer.Proc.SendChan <- &Message{
+				Peer: peer,
+				Body: allbuf,
+			}
+		*/
+		peer.Connection.Write(allbuf)
 	}
 	return err
 }
@@ -47,10 +50,13 @@ func (peer *ClientPeer) TransmitMsg(msg *Message) {
 	binary.Write(bufhead, binary.LittleEndian, msg.Head.Length)
 	binary.Write(bufhead, binary.LittleEndian, msg.Head.ID)
 	allbuf := base.BytesCombine(bufhead.Bytes(), msg.Body)
+	/*
 	peer.Proc.SendChan <- &Message{
 		Peer: peer,
 		Body: allbuf,
 	}
+	*/
+peer.Connection.Write(allbuf)
 }
 
 // ConnectionHandler read messages here
@@ -73,7 +79,7 @@ func (peer *ClientPeer) ConnectionHandler() {
 		if err != nil {
 			//base.LogInfo("socket read error %s,%s", peer.Connection.RemoteAddr().String(), err.Error())
 			//peer.Connection.Close()
-			peer.Connection = nil
+			//peer.Connection = nil
 			break
 		}
 		msg := &Message{
