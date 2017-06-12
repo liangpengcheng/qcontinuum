@@ -39,6 +39,7 @@ var (
 // Processor 消息处理器
 type Processor struct {
 	MessageChan   chan *Message
+	SendChan      chan *Message
 	EventChan     chan *Event
 	FuncChan      chan ProcFunction
 	CallbackMap   map[int32]MsgCallback
@@ -51,6 +52,7 @@ type Processor struct {
 func NewProcessor() *Processor {
 	p := &Processor{
 		MessageChan:   make(chan *Message, 1024),
+		SendChan:      make(chan *Message, 1024),
 		EventChan:     make(chan *Event, 1024),
 		FuncChan:      make(chan ProcFunction, 64),
 		EventCallback: make(map[int32]EventCallback),
@@ -86,11 +88,21 @@ func (p *Processor) AddEventCallback(id int32, callback EventCallback) {
 func (p *Processor) RemoveEventCallback(id int32) {
 	delete(p.EventCallback, id)
 }
+func (p *Processor) send() {
+	for {
+		select {
+		case msg := <-p.SendChan:
+			if msg.Peer.Connection != nil {
+				msg.Peer.Connection.Write(msg.Body)
+			}
+		}
+	}
+}
 
 // StartProcess 开始处理信息
 // 只有调用了这个借口，处理器才会处理实际的信息，以及实际发送消息
 func (p *Processor) StartProcess() {
-
+	go p.send()
 	base.LogInfo("processor is starting ")
 	for {
 		select {

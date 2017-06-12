@@ -45,7 +45,7 @@ func (s *KcpServer) BlockAccept(proc *Processor) {
 			// 这个参数需要好好研究
 			conn.SetNoDelay(1, 10, 1, 0)
 			conn.SetMtu(1400)
-			conn.SetWindowSize(2048, 2048)
+			conn.SetWindowSize(128, 128)
 			conn.SetACKNoDelay(true)
 			peer := &ClientPeer{
 				Connection:   conn,

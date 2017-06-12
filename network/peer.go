@@ -22,6 +22,7 @@ type ClientPeer struct {
 
 // SendMessage send a message to peer
 func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
+
 	length := int32(proto.Size(msg))
 	bufhead := bytes.NewBuffer([]byte{})
 	//buf := Base.BufferPoolGet()
@@ -31,18 +32,25 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 	buf, err := proto.Marshal(msg)
 	if err == nil {
 		allbuf := base.BytesCombine(bufhead.Bytes(), buf)
-		peer.Connection.Write(allbuf)
+		peer.Proc.SendChan <- &Message{
+			Peer: peer,
+			Body: allbuf,
+		}
 	}
 	return err
 }
 
 // TransmitMsg 转发消息
 func (peer *ClientPeer) TransmitMsg(msg *Message) {
+
 	bufhead := bytes.NewBuffer([]byte{})
 	binary.Write(bufhead, binary.LittleEndian, msg.Head.Length)
 	binary.Write(bufhead, binary.LittleEndian, msg.Head.ID)
 	allbuf := base.BytesCombine(bufhead.Bytes(), msg.Body)
-	peer.Connection.Write(allbuf)
+	peer.Proc.SendChan <- &Message{
+		Peer: peer,
+		Body: allbuf,
+	}
 }
 
 // ConnectionHandler read messages here
