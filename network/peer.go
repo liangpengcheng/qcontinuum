@@ -51,12 +51,12 @@ func (peer *ClientPeer) TransmitMsg(msg *Message) {
 	binary.Write(bufhead, binary.LittleEndian, msg.Head.ID)
 	allbuf := base.BytesCombine(bufhead.Bytes(), msg.Body)
 	/*
-	peer.Proc.SendChan <- &Message{
-		Peer: peer,
-		Body: allbuf,
-	}
+		peer.Proc.SendChan <- &Message{
+			Peer: peer,
+			Body: allbuf,
+		}
 	*/
-peer.Connection.Write(allbuf)
+	peer.Connection.Write(allbuf)
 }
 
 // ConnectionHandler read messages here
