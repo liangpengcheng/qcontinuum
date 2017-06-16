@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+
+	"github.com/golang/protobuf/proto"
+	"github.com/liangpengcheng/qcontinuum/base"
 )
 
 var maxMessageLength = 4096
@@ -36,4 +39,20 @@ func ReadFromConnect(conn io.Reader, length int) ([]byte, error) {
 	}
 	return nil, err
 
+}
+
+// GetMessageBuffer 把msg转成buffer
+func GetMessageBuffer(msg proto.Message, id int32) ([]byte, error) {
+	length := int32(proto.Size(msg))
+	bufhead := bytes.NewBuffer([]byte{})
+	//buf := Base.BufferPoolGet()
+	//defer Base.BufferPoolPut(buf)
+	binary.Write(bufhead, binary.LittleEndian, length)
+	binary.Write(bufhead, binary.LittleEndian, id)
+	buf, err := proto.Marshal(msg)
+	if err == nil {
+		allbuf := base.BytesCombine(bufhead.Bytes(), buf)
+		return allbuf, nil
+	}
+	return nil, err
 }

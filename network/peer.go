@@ -43,6 +43,11 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 	return err
 }
 
+// SendMessageBuffer 发送缓冲区
+func (peer *ClientPeer) SendMessageBuffer(msg []byte) {
+	peer.Connection.Write(msg)
+}
+
 // TransmitMsg 转发消息
 func (peer *ClientPeer) TransmitMsg(msg *Message) {
 
