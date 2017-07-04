@@ -1,6 +1,8 @@
 package network
 
 import (
+	"time"
+
 	"github.com/liangpengcheng/qcontinuum/base"
 )
 
@@ -38,12 +40,15 @@ var (
 
 // Processor 消息处理器
 type Processor struct {
-	MessageChan   chan *Message
-	SendChan      chan *Message
-	EventChan     chan *Event
-	FuncChan      chan ProcFunction
-	CallbackMap   map[int32]MsgCallback
-	EventCallback map[int32]EventCallback
+	MessageChan    chan *Message
+	SendChan       chan *Message
+	EventChan      chan *Event
+	FuncChan       chan ProcFunction
+	CallbackMap    map[int32]MsgCallback
+	EventCallback  map[int32]EventCallback
+	updateCallback ProcFunction
+	// 更新时间
+	loopTime time.Duration
 	// ImmediateMode 立即回调消息，如果想要线程安全，必须设置为false，默认为false
 	ImmediateMode bool
 }
@@ -57,6 +62,7 @@ func NewProcessor() *Processor {
 		FuncChan:      make(chan ProcFunction, 64),
 		EventCallback: make(map[int32]EventCallback),
 		CallbackMap:   make(map[int32]MsgCallback),
+		loopTime:      3600000,
 		ImmediateMode: false,
 	}
 	return p
@@ -72,6 +78,12 @@ func (p *Processor) AddCallback(id int32, callback MsgCallback) {
 	if id != 0 {
 		p.addCallback(id, callback)
 	}
+}
+
+// SetUpdate 设置更新时间，以及更新函数
+func (p *Processor) SetUpdate(uptime time.Duration, upcall ProcFunction) {
+	p.loopTime = uptime
+	p.updateCallback = upcall
 }
 
 // RemoveCallback 删除回调
@@ -104,6 +116,7 @@ func (p *Processor) send() {
 func (p *Processor) StartProcess() {
 	go p.send()
 	base.LogInfo("processor is starting ")
+	tick := time.Tick(p.loopTime)
 	for {
 		select {
 		case msg := <-p.MessageChan:
@@ -122,6 +135,10 @@ func (p *Processor) StartProcess() {
 			}
 		case f := <-p.FuncChan:
 			f()
+		case <-tick:
+			if p.updateCallback != nil {
+				p.updateCallback()
+			}
 		}
 
 	}
