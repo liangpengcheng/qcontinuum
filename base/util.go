@@ -2,28 +2,10 @@ package base
 
 import (
 	"bytes"
-	"math/rand"
 	"reflect"
-	"time"
+	"strconv"
 	"unsafe"
-
-	"github.com/liangpengcheng/qcontinuum/base"
 )
-
-// Krand random
-func Krand(size int, kind int) []byte {
-	ikind, kinds, result := kind, [][]int{[]int{10, 48}, []int{26, 97}, []int{26, 65}}, make([]byte, size)
-	isall := kind > 2 || kind < 0
-	rand.Seed(time.Now().UnixNano())
-	for i := 0; i < size; i++ {
-		if isall { // random ikind
-			ikind = rand.Intn(3)
-		}
-		scope, base := kinds[ikind][0], kinds[ikind][1]
-		result[i] = uint8(base + rand.Intn(scope))
-	}
-	return result
-}
 
 // String bring a no copy convert from byte slice to string
 // consider the risk
@@ -56,15 +38,18 @@ func Bytes(s string) (b []byte) {
 func BytesCombine(pBytes ...[]byte) []byte {
 	return bytes.Join(pBytes, []byte(""))
 }
+
+// CheckError print error message if e is not nil
 func CheckError(e error, info string) {
 	if e != nil {
-		base.LogError( info +  e.Error()))
+		LogError(info + e.Error())
 	}
 }
+
+// IsNumberString check s is a number string or not
 func IsNumberString(s string) bool {
 	if _, err := strconv.ParseFloat(s, 10); err == nil {
 		return true
-	} else {
-		return false
 	}
+	return false
 }

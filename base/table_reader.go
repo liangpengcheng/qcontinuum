@@ -7,6 +7,7 @@ import (
 	"os"
 )
 
+// Csv2Json 读表
 func Csv2Json(csvfile string) string {
 
 	fp, err := os.Open(csvfile)
