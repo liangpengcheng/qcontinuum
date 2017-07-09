@@ -79,8 +79,8 @@ type (
 		ext []byte
 
 		// FEC
-		fecDecoder *FECDecoder
-		fecEncoder *FECEncoder
+		fecDecoder *fecDecoder
+		fecEncoder *fecEncoder
 
 		// settings
 		remote     net.Addr  // remote peer address
@@ -302,6 +302,7 @@ func (s *UDPSession) Write(b []byte) (n int, err error) {
 
 // Close closes the connection.
 func (s *UDPSession) Close() error {
+	// remove this session from updater & listener(if necessary)
 	updater.removeSession(s)
 	if s.l != nil { // notify listener
 		s.l.closeSession(s.remote)
@@ -404,6 +405,7 @@ func (s *UDPSession) SetDUP(dup int) {
 }
 
 // SetNoDelay calls nodelay() of kcp
+// https://github.com/skywind3000/kcp/blob/master/README.en.md#protocol-configuration
 func (s *UDPSession) SetNoDelay(nodelay, interval, resend, nc int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -415,7 +417,7 @@ func (s *UDPSession) SetDSCP(dscp int) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.l == nil {
-		if nc, ok := s.conn.(*ConnectedUDPConn); ok {
+		if nc, ok := s.conn.(*connectedUDPConn); ok {
 			return ipv4.NewConn(nc.UDPConn).SetTOS(dscp << 2)
 		} else if nc, ok := s.conn.(net.Conn); ok {
 			return ipv4.NewConn(nc).SetTOS(dscp << 2)
@@ -458,19 +460,19 @@ func (s *UDPSession) SetWriteBuffer(bytes int) error {
 func (s *UDPSession) output(buf []byte) {
 	var ecc [][]byte
 
-	// extend buf's header space
+	// 0. extend buf's header space(if necessary)
 	ext := buf
 	if s.headerSize > 0 {
 		ext = s.ext[:s.headerSize+len(buf)]
 		copy(ext[s.headerSize:], buf)
 	}
 
-	// FEC stage
+	// 1. FEC encoding
 	if s.fecEncoder != nil {
-		ecc = s.fecEncoder.Encode(ext)
+		ecc = s.fecEncoder.encode(ext)
 	}
 
-	// encryption stage
+	// 2&3. crc32 & encryption
 	if s.block != nil {
 		io.ReadFull(rand.Reader, ext[:nonceSize])
 		checksum := crc32.ChecksumIEEE(ext[cryptHeaderSize:])
@@ -485,17 +487,15 @@ func (s *UDPSession) output(buf []byte) {
 		}
 	}
 
-	// WriteTo kernel
+	// 4. WriteTo kernel
 	nbytes := 0
 	npkts := 0
-	// if mrand.Intn(100) < 50 {
 	for i := 0; i < s.dup+1; i++ {
 		if n, err := s.conn.WriteTo(ext, s.remote); err == nil {
 			nbytes += n
 			npkts++
 		}
 	}
-	// }
 
 	for k := range ecc {
 		if n, err := s.conn.WriteTo(ecc[k], s.remote); err == nil {
@@ -553,7 +553,7 @@ func (s *UDPSession) kcpInput(data []byte) {
 				fecParityShards++
 			}
 
-			recovers := s.fecDecoder.Decode(f)
+			recovers := s.fecDecoder.decode(f)
 			for _, r := range recovers {
 				if len(r) >= 2 { // must be larger than 2bytes
 					sz := binary.LittleEndian.Uint16(r)
@@ -663,7 +663,7 @@ type (
 		block        BlockCrypt     // block encryption
 		dataShards   int            // FEC data shard
 		parityShards int            // FEC parity shard
-		fecDecoder   *FECDecoder    // FEC mock initialization
+		fecDecoder   *fecDecoder    // FEC mock initialization
 		conn         net.PacketConn // the underlying packet connection
 
 		sessions        map[string]*UDPSession // all sessions accepted by this Listener
@@ -684,6 +684,10 @@ type (
 
 // monitor incoming data for all connections of server
 func (l *Listener) monitor() {
+	// cache last session
+	var lastAddr string
+	var lastSession *UDPSession
+
 	chPacket := make(chan inPacket, qlen)
 	go l.receiver(chPacket)
 	for {
@@ -709,7 +713,18 @@ func (l *Listener) monitor() {
 
 			if dataValid {
 				addr := from.String()
-				s, ok := l.sessions[addr]
+				var s *UDPSession
+				var ok bool
+
+				// packets received from an address always come in batch.
+				// cache the session for next packet, without querying map.
+				if addr == lastAddr {
+					s, ok = lastSession, true
+				} else if s, ok = l.sessions[addr]; ok {
+					lastSession = s
+					lastAddr = addr
+				}
+
 				if !ok { // new session
 					if len(l.chAccepts) < cap(l.chAccepts) { // do not let new session overwhelm accept queue
 						var conv uint32
@@ -905,7 +920,7 @@ func DialWithOptions(raddr string, block BlockCrypt, dataShards, parityShards in
 		return nil, errors.Wrap(err, "net.DialUDP")
 	}
 
-	return NewConn(raddr, block, dataShards, parityShards, &ConnectedUDPConn{udpconn})
+	return NewConn(raddr, block, dataShards, parityShards, &connectedUDPConn{udpconn})
 }
 
 // NewConn establishes a session and talks KCP protocol over a packet connection.
@@ -923,10 +938,10 @@ func NewConn(raddr string, block BlockCrypt, dataShards, parityShards int, conn 
 // returns current time in milliseconds
 func currentMs() uint32 { return uint32(time.Now().UnixNano() / int64(time.Millisecond)) }
 
-// ConnectedUDPConn is a wrapper for net.UDPConn which converts WriteTo syscalls
+// connectedUDPConn is a wrapper for net.UDPConn which converts WriteTo syscalls
 // to Write syscalls that are 4 times faster on some OS'es. This should only be
 // used for connections that were produced by a net.Dial* call.
-type ConnectedUDPConn struct{ *net.UDPConn }
+type connectedUDPConn struct{ *net.UDPConn }
 
 // WriteTo redirects all writes to the Write syscall, which is 4 times faster.
-func (c *ConnectedUDPConn) WriteTo(b []byte, addr net.Addr) (int, error) { return c.Write(b) }
+func (c *connectedUDPConn) WriteTo(b []byte, addr net.Addr) (int, error) { return c.Write(b) }
