@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"time"
 	"unsafe"
+
+	"github.com/liangpengcheng/qcontinuum/base"
 )
 
 // Krand random
@@ -53,4 +55,16 @@ func Bytes(s string) (b []byte) {
 // BytesCombine 拼接[]byte
 func BytesCombine(pBytes ...[]byte) []byte {
 	return bytes.Join(pBytes, []byte(""))
+}
+func CheckError(e error, info string) {
+	if e != nil {
+		base.LogError( info +  e.Error()))
+	}
+}
+func IsNumberString(s string) bool {
+	if _, err := strconv.ParseFloat(s, 10); err == nil {
+		return true
+	} else {
+		return false
+	}
 }
