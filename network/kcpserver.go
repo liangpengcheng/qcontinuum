@@ -75,6 +75,6 @@ func setupKcp(conn *kcp.UDPSession) {
 	// 这个参数需要好好研究
 	conn.SetNoDelay(1, 10, 2, 1)
 	conn.SetMtu(1400)
-	conn.SetWindowSize(1, 1)
+	conn.SetWindowSize(4096, 4096)
 	conn.SetACKNoDelay(true)
 }
