@@ -40,13 +40,7 @@ func (s *KcpServer) BlockAccept(proc *Processor) {
 	for {
 		if conn, err := s.Listener.AcceptKCP(); err == nil {
 			base.LogInfo("remote address:%s", conn.RemoteAddr().String())
-			conn.SetStreamMode(false)
-			conn.SetWriteDelay(false)
-			// 这个参数需要好好研究
-			conn.SetNoDelay(1, 10, 1, 0)
-			conn.SetMtu(1400)
-			conn.SetWindowSize(1024, 1024)
-			conn.SetACKNoDelay(true)
+			setupKcp(conn)
 			peer := &ClientPeer{
 				Connection:   conn,
 				RedirectProc: make(chan *Processor, 1),
@@ -66,17 +60,21 @@ func (s *KcpServer) BlockAccept(proc *Processor) {
 func (s *KcpServer) BlockAcceptOne(proc *Processor) {
 	if conn, err := s.Listener.AcceptKCP(); err == nil {
 		base.LogInfo("remote address:%s", conn.RemoteAddr().String())
-		conn.SetStreamMode(false)
-		conn.SetWriteDelay(false)
-		// 这个参数需要好好研究
-		conn.SetNoDelay(1, 10, 1, 0)
-		conn.SetMtu(1400)
-		conn.SetWindowSize(2048, 2048)
-		conn.SetACKNoDelay(true)
+		setupKcp(conn)
 		peer := &ClientPeer{
 			Connection: conn,
 		}
 
 		go peer.ConnectionHandler()
 	}
+}
+
+func setupKcp(conn *kcp.UDPSession) {
+	conn.SetStreamMode(false)
+	conn.SetWriteDelay(false)
+	// 这个参数需要好好研究
+	conn.SetNoDelay(1, 10, 2, 1)
+	conn.SetMtu(1400)
+	conn.SetWindowSize(1, 1)
+	conn.SetACKNoDelay(true)
 }
