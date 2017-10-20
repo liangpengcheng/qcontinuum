@@ -62,7 +62,9 @@ func (s *KcpServer) BlockAcceptOne(proc *Processor) {
 		base.LogInfo("remote address:%s", conn.RemoteAddr().String())
 		setupKcp(conn)
 		peer := &ClientPeer{
-			Connection: conn,
+			Connection:   conn,
+			RedirectProc: make(chan *Processor, 1),
+			Proc:         proc,
 		}
 
 		go peer.ConnectionHandler()

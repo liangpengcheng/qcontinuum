@@ -58,7 +58,9 @@ func (s *Server) BlockAccept(proc *Processor) {
 			if err == nil {
 				base.LogDebug("incomming connection :%s", conn.RemoteAddr().String())
 				peer := &ClientPeer{
-					Connection: conn,
+					Connection:   conn,
+					RedirectProc: make(chan *Processor, 1),
+					Proc:         proc,
 				}
 				event := &Event{
 					ID:   AddEvent,
