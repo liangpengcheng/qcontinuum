@@ -14,8 +14,8 @@ type WebSocketServer struct {
 }
 
 // NewWebSocket 新建一个websocket处理,这个是golang系统http建立的http服务的socket，访问在/ws下
-func NewWebSocket(proc *Processor) {
-	http.Handle("/ws", websocket.Handler(
+func NewWebSocket(path string, proc *Processor) {
+	http.Handle(path, websocket.Handler(
 		func(ws *websocket.Conn) {
 			base.LogInfo("new webclient connected :%s", ws.RemoteAddr().String())
 			peer := &ClientPeer{
@@ -27,6 +27,6 @@ func NewWebSocket(proc *Processor) {
 				Peer: peer,
 			}
 			proc.EventChan <- event
-			go peer.ConnectionHandler()
+			peer.ConnectionHandler()
 		}))
 }

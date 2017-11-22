@@ -73,7 +73,8 @@ func TestWebSocket(t *testing.T) {
 		}
 	})
 
-	NewWebSocket(proc)
+	NewWebSocket("/ws", proc)
+	// client
 	url := "ws://127.0.0.1:8888/ws"
 	org := "http://127.0.0.1:8888/"
 	conn, err := websocket.Dial(url, "", org)
