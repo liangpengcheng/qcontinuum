@@ -16,7 +16,8 @@ func InitLogFile(filename string) {
 	if err != nil {
 		log.Panicf("open log file:%s.log error:%s", filename, err)
 	}
-	logger = log.New(logFile, "", log.LstdFlags)
+	log.SetFlags(log.Ldate | log.Lmicroseconds)
+	logger = log.New(logFile, "", log.Ldate|log.Lmicroseconds)
 }
 
 // CloseLogFile 关闭日志文件
