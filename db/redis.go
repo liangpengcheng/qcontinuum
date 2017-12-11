@@ -17,7 +17,12 @@ type RedisNode struct {
 }
 
 // NewRedisNode 创建一个节点
-func NewRedisNode(addr string, pwd string, dbindex int32) *RedisNode {
+func NewRedisNode(addr string, pwd string, dbindex int32, redisorssdb bool) *RedisNode {
+	if redisorssdb {
+		USECMD = REDISCMD
+	} else {
+		USECMD = SSDBCMD
+	}
 	return &RedisNode{
 		pool: &redis.Pool{
 			MaxIdle:     3,
@@ -29,12 +34,12 @@ func NewRedisNode(addr string, pwd string, dbindex int32) *RedisNode {
 					return nil, err
 				}
 				if len(pwd) > 0 {
-					if _, err := r.Do("AUTH", pwd); err != nil {
+					if _, err := r.Do(redisCmd[USECMD][cAUTH], pwd); err != nil {
 						base.LogError("redis auth error :%s", err.Error())
 					}
 				}
 				if dbindex > 0 {
-					if _, err := r.Do("SELECT", dbindex); err != nil {
+					if _, err := r.Do(redisCmd[USECMD][cSELECT], dbindex); err != nil {
 						base.LogError("redis select error :%s ", err.Error())
 						return nil, err
 					}
@@ -60,7 +65,7 @@ func (node *RedisNode) Put(conn redis.Conn) {
 
 // GetHashInterfacePtr get hash value
 func GetHashInterfacePtr(conn redis.Conn, hkey string, key string, valuePtr interface{}) error {
-	ret, err := conn.Do("hget", hkey, key)
+	ret, err := conn.Do(getRCmd(cHGET), hkey, key)
 	//ret, err := redis.String(conn.Do("get", key))
 	if err == nil && ret != nil {
 		var formaterr error
@@ -114,13 +119,13 @@ func GetHashInterfacePtr(conn redis.Conn, hkey string, key string, valuePtr inte
 func SetExpiry(conn redis.Conn, key string, valuePtr interface{}, expiry uint32) {
 	SetInterfacePtr(conn, key, valuePtr)
 	if expiry > 0 {
-		conn.Do("expire", key, expiry)
+		conn.Do(getRCmd(cEXPIRE), key, expiry)
 	}
 }
 
 // GetInterfacePtr 泛型获得,没有这个key的时候也返回error
 func GetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) error {
-	ret, err := conn.Do("get", key)
+	ret, err := conn.Do(getRCmd(cGET), key)
 	//ret, err := redis.String(conn.Do("get", key))
 	if err == nil && ret != nil {
 		var formaterr error
@@ -173,43 +178,43 @@ func GetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) error {
 func SetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) {
 	switch out := valuePtr.(type) {
 	case *int:
-		conn.Do("set", key, *out)
+		conn.Do(getRCmd(cSET), key, *out)
 	case *int32:
-		conn.Do("set", key, *out)
+		conn.Do(getRCmd(cSET), key, *out)
 	case *int64:
-		conn.Do("set", key, *out)
+		conn.Do(getRCmd(cSET), key, *out)
 	case *float32:
-		conn.Do("set", key, *out)
+		conn.Do(getRCmd(cSET), key, *out)
 	case *string:
-		conn.Do("set", key, *out)
+		conn.Do(getRCmd(cSET), key, *out)
 	case *float64:
-		conn.Do("set", key, *out)
+		conn.Do(getRCmd(cSET), key, *out)
 	case *[]byte:
-		conn.Do("set", key, *out)
+		conn.Do(getRCmd(cSET), key, *out)
 	case *bool:
-		conn.Do("set", key, *out)
+		conn.Do(getRCmd(cSET), key, *out)
 		break
 	case int:
-		conn.Do("set", key, out)
+		conn.Do(getRCmd(cSET), key, out)
 	case int32:
-		conn.Do("set", key, out)
+		conn.Do(getRCmd(cSET), key, out)
 	case int64:
-		conn.Do("set", key, out)
+		conn.Do(getRCmd(cSET), key, out)
 	case float32:
-		conn.Do("set", key, out)
+		conn.Do(getRCmd(cSET), key, out)
 	case string:
-		conn.Do("set", key, out)
+		conn.Do(getRCmd(cSET), key, out)
 	case float64:
-		conn.Do("set", key, out)
+		conn.Do(getRCmd(cSET), key, out)
 	case []byte:
-		conn.Do("set", key, out)
+		conn.Do(getRCmd(cSET), key, out)
 	case bool:
-		conn.Do("set", key, out)
+		conn.Do(getRCmd(cSET), key, out)
 		break
 	case proto.Message:
 		buf, err := proto.Marshal(out)
 		if err == nil {
-			conn.Do("set", key, buf)
+			conn.Do(getRCmd(cSET), key, buf)
 		}
 		break
 	default:
@@ -223,42 +228,42 @@ func SetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) {
 func SetHashInterfacePtr(conn redis.Conn, hashKey string, key string, valuePtr interface{}) {
 	switch out := valuePtr.(type) {
 	case *int:
-		conn.Do("hset", hashKey, key, *out)
+		conn.Do(getRCmd(cHSET), hashKey, key, *out)
 	case *int32:
-		conn.Do("hset", hashKey, key, *out)
+		conn.Do(getRCmd(cHSET), hashKey, key, *out)
 	case *int64:
-		conn.Do("hset", hashKey, key, *out)
+		conn.Do(getRCmd(cHSET), hashKey, key, *out)
 	case *float32:
-		conn.Do("hset", hashKey, key, *out)
+		conn.Do(getRCmd(cHSET), hashKey, key, *out)
 	case *string:
-		conn.Do("hset", hashKey, key, *out)
+		conn.Do(getRCmd(cHSET), hashKey, key, *out)
 	case *float64:
-		conn.Do("hset", hashKey, key, *out)
+		conn.Do(getRCmd(cHSET), hashKey, key, *out)
 	case *[]byte:
-		conn.Do("hset", hashKey, key, *out)
+		conn.Do(getRCmd(cHSET), hashKey, key, *out)
 	case *bool:
-		conn.Do("hset", hashKey, key, *out)
+		conn.Do(getRCmd(cHSET), hashKey, key, *out)
 		break
 	case int:
-		conn.Do("hset", hashKey, key, out)
+		conn.Do(getRCmd(cHSET), hashKey, key, out)
 	case int32:
-		conn.Do("hset", hashKey, key, out)
+		conn.Do(getRCmd(cHSET), hashKey, key, out)
 	case int64:
-		conn.Do("hset", hashKey, key, out)
+		conn.Do(getRCmd(cHSET), hashKey, key, out)
 	case float32:
-		conn.Do("hset", hashKey, key, out)
+		conn.Do(getRCmd(cHSET), hashKey, key, out)
 	case string:
-		conn.Do("hset", hashKey, key, out)
+		conn.Do(getRCmd(cHSET), hashKey, key, out)
 	case float64:
-		conn.Do("hset", hashKey, key, out)
+		conn.Do(getRCmd(cHSET), hashKey, key, out)
 	case []byte:
 	case bool:
-		conn.Do("hset", hashKey, key, out)
+		conn.Do(getRCmd(cHSET), hashKey, key, out)
 		break
 	case proto.Message:
 		buf, err := proto.Marshal(out)
 		if err == nil {
-			conn.Do("set", key, buf)
+			conn.Do(getRCmd(cHSET), key, buf)
 		}
 		break
 	default:
@@ -268,7 +273,7 @@ func SetHashInterfacePtr(conn redis.Conn, hashKey string, key string, valuePtr i
 
 // KeyExistsRedis 是否存在这个键值
 func KeyExistsRedis(conn redis.Conn, key string) bool {
-	exist, error := redis.Bool(conn.Do("exists", key))
+	exist, error := redis.Bool(conn.Do(getRCmd(cEXISTS), key))
 	if exist && error == nil {
 		return true
 	}
@@ -277,16 +282,16 @@ func KeyExistsRedis(conn redis.Conn, key string) bool {
 
 // GenKeyIDRedis 获得一个自增长id
 func GenKeyIDRedis(conn redis.Conn, key string, start int64) int64 {
-	exist, error := redis.Bool(conn.Do("exists", key))
+	exist, error := redis.Bool(conn.Do(getRCmd(cEXISTS), key))
 	if exist && error == nil {
-		retv, error := redis.Int64(conn.Do("incr", key))
+		retv, error := redis.Int64(conn.Do(getRCmd(cINCRBY), key, 1))
 		if error == nil {
 			return retv
 		}
 		base.LogError("genid (%s)Error", key)
 		return -1
 	}
-	if _, err := conn.Do("set", key, start); err == nil {
+	if _, err := conn.Do(getRCmd(cSET), key, start); err == nil {
 		return start
 	}
 	return -1
@@ -294,13 +299,13 @@ func GenKeyIDRedis(conn redis.Conn, key string, start int64) int64 {
 
 // DelRedis 删除某个键值
 func DelRedis(conn redis.Conn, key string) {
-	conn.Do("del", key)
+	conn.Do(getRCmd(cDEL), key)
 }
 
 // HExistsRedis 是否存在某个hash值
 func HExistsRedis(conn redis.Conn, hashKey, key string) bool {
 
-	exist, error := redis.Bool(conn.Do("hexists", hashKey, key))
+	exist, error := redis.Bool(conn.Do(getRCmd(cHEXISTS), hashKey, key))
 	if exist && error == nil {
 		return true
 	}
@@ -310,13 +315,13 @@ func HExistsRedis(conn redis.Conn, hashKey, key string) bool {
 
 // HashDelRedis 删除某个hash键值
 func HashDelRedis(conn redis.Conn, hashKey, key string) {
-	conn.Do("hdel", hashKey, key)
+	conn.Do(getRCmd(cHDEL), hashKey, key)
 }
 
 // HLenRedis hash长度
 func HLenRedis(conn redis.Conn, hashKey string) uint {
 
-	res, err := conn.Do("hlen", hashKey)
+	res, err := conn.Do(getRCmd(cHLEN), hashKey)
 	if err == nil {
 		len, err := redis.Int(res, err)
 		if len != 0 && err == nil {

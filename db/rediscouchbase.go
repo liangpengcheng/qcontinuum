@@ -29,10 +29,8 @@ func (rc *rediscouchbaseQuery) Get(key string, valuePtr interface{}) {
 func (rc *rediscouchbaseQuery) Set(key string, v interface{}, expiry uint32) {
 	conn := rc.node.GetRedis()
 	defer rc.node.Put(conn)
-	conn.Do("set", key, v)
-	if expiry > 0 {
-		conn.Do("expire", key, expiry)
-	}
+	SetExpiry(conn, key, v, expiry)
+
 	//设置couchbase
 	go rc.couchNode.bucket.Upsert(key, v, expiry)
 }
@@ -107,7 +105,7 @@ func (rc *rediscouchbaseQuery) GetHash(hashkey string, key string, valuePtr inte
 func (rc *rediscouchbaseQuery) SetHash(hashkey string, key string, value interface{}) {
 	conn := rc.node.GetRedis()
 	defer rc.node.Put(conn)
-	conn.Do("hset", hashkey, key, value)
+	SetHashInterfacePtr(conn, hashkey, key, &value)
 	//设置couchbase
 	go func() {
 		_, err := MapUpser(rc.couchNode.bucket, hashkey, key, value, true)
@@ -120,8 +118,8 @@ func (rc *rediscouchbaseQuery) SetHash(hashkey string, key string, value interfa
 func (rc *rediscouchbaseQuery) Exists(key string) bool {
 	conn := rc.node.GetRedis()
 	defer rc.node.Put(conn)
-	exist, error := redis.Bool(conn.Do("exists", key))
-	if exist && error == nil {
+	exist := KeyExistsRedis(conn, key)
+	if exist {
 		return true
 	}
 	var ret interface{}
@@ -134,8 +132,8 @@ func (rc *rediscouchbaseQuery) Exists(key string) bool {
 func (rc *rediscouchbaseQuery) HExists(hashKey, key string) bool {
 	conn := rc.node.GetRedis()
 	defer rc.node.Put(conn)
-	exist, error := redis.Bool(conn.Do("hexists", hashKey, key))
-	if exist && error == nil {
+	exist := HExistsRedis(conn, hashKey, key)
+	if exist {
 		return true
 	}
 	var ret interface{}
@@ -148,18 +146,14 @@ func (rc *rediscouchbaseQuery) HExists(hashKey, key string) bool {
 func (rc *rediscouchbaseQuery) HashDel(hashKey, key string) {
 	conn := rc.node.GetRedis()
 	defer rc.node.Put(conn)
-	conn.Do("hdel", hashKey, key)
+	HashDelRedis(conn, hashKey, key)
 	rc.couchNode.bucket.MapRemove(hashKey, key)
 }
 func (rc *rediscouchbaseQuery) HLen(hashKey string) uint {
 	conn := rc.node.GetRedis()
 	defer rc.node.Put(conn)
-	res, err := conn.Do("hlen", hashKey)
-	if err == nil {
-		len, err := redis.Int(res, err)
-		if len != 0 && err == nil {
-			return uint(len)
-		}
+	if l := HLenRedis(conn, hashKey); l > 0 {
+		return l
 	}
 	len, _, _ := rc.couchNode.bucket.MapSize(hashKey)
 	return len
