@@ -14,14 +14,14 @@ type rediscouchbaseQuery struct {
 func (rc *rediscouchbaseQuery) Get(key string, valuePtr interface{}) {
 	conn := rc.node.GetRedis()
 	defer rc.node.Put(conn)
-	err := GetInterfacePtr(conn, key, valuePtr)
+	err := GetRedis(conn, key, valuePtr)
 	if err == nil {
 		return
 	}
 	//从couchbase读取
 	//var retstr string
 	rc.couchNode.bucket.Get(key, valuePtr)
-	SetInterfacePtr(conn, key, valuePtr)
+	SetRedis(conn, key, valuePtr)
 	//return retstr
 }
 
@@ -29,7 +29,7 @@ func (rc *rediscouchbaseQuery) Get(key string, valuePtr interface{}) {
 func (rc *rediscouchbaseQuery) Set(key string, v interface{}, expiry uint32) {
 	conn := rc.node.GetRedis()
 	defer rc.node.Put(conn)
-	SetExpiry(conn, key, v, expiry)
+	SetExpiryRedis(conn, key, v, expiry)
 
 	//设置couchbase
 	go rc.couchNode.bucket.Upsert(key, v, expiry)
@@ -93,19 +93,19 @@ func (rc *rediscouchbaseQuery) Del(key string) {
 func (rc *rediscouchbaseQuery) GetHash(hashkey string, key string, valuePtr interface{}) {
 	conn := rc.node.GetRedis()
 	defer rc.node.Put(conn)
-	err := GetHashInterfacePtr(conn, hashkey, key, valuePtr)
+	err := GetHashRedis(conn, hashkey, key, valuePtr)
 	if err == nil {
 		return
 	}
 	//从couchbase读取
 	//var retstr string
 	rc.couchNode.bucket.MapGet(key, hashkey, valuePtr)
-	SetHashInterfacePtr(conn, hashkey, key, valuePtr)
+	SetHashRedis(conn, hashkey, key, valuePtr)
 }
 func (rc *rediscouchbaseQuery) SetHash(hashkey string, key string, value interface{}) {
 	conn := rc.node.GetRedis()
 	defer rc.node.Put(conn)
-	SetHashInterfacePtr(conn, hashkey, key, &value)
+	SetHashRedis(conn, hashkey, key, &value)
 	//设置couchbase
 	go func() {
 		_, err := MapUpser(rc.couchNode.bucket, hashkey, key, value, true)
