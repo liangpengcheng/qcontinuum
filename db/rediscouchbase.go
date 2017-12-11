@@ -48,23 +48,28 @@ func (rc *rediscouchbaseQuery) GenID(key string, start int64) int64 {
 			base.LogError("genid (%s)Error", key)
 			return -1
 		}
-		return retv + start
+		return retv
 	}
-	counter, _, err := rc.couchNode.bucket.Counter(key, 1, 0, 0)
+	counter, _, err := rc.couchNode.bucket.Counter(key, 1, start, 0)
 	if err != nil {
 		base.LogError("GenID (%s) Error (%s) ", key, err.Error())
 		return -1
 	}
 	conn.Do("set", key, counter)
-	return int64(counter) + start
+	return int64(counter)
 }
 func (rc *rediscouchbaseQuery) GetObj(key string, obj proto.Message) {
 	var b []byte
 	rc.Get(key, &b)
-	err := proto.Unmarshal(b, obj)
-	if err != nil {
-		base.LogError("proto.Ummarshal error key %s,e %s", key, err.Error())
+	if b != nil {
+		err := proto.Unmarshal(b, obj)
+		if err != nil {
+			base.LogError("proto.Ummarshal error key %s,e %s", key, err.Error())
+		}
+	} else {
+		rc.couchNode.bucket.Get(key, obj)
 	}
+
 }
 func (rc *rediscouchbaseQuery) SetObj(key string, obj proto.Message, expiry uint32) {
 	b, err := proto.Marshal(obj)
