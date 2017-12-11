@@ -63,8 +63,8 @@ func (node *RedisNode) Put(conn redis.Conn) {
 	conn.Close()
 }
 
-// GetHashInterfacePtr get hash value
-func GetHashInterfacePtr(conn redis.Conn, hkey string, key string, valuePtr interface{}) error {
+// GetHashRedis get hash value
+func GetHashRedis(conn redis.Conn, hkey string, key string, valuePtr interface{}) error {
 	ret, err := conn.Do(getRCmd(cHGET), hkey, key)
 	//ret, err := redis.String(conn.Do("get", key))
 	if err == nil && ret != nil {
@@ -115,16 +115,16 @@ func GetHashInterfacePtr(conn redis.Conn, hkey string, key string, valuePtr inte
 
 }
 
-// SetExpiry 设置一个数值，并且设置过期时间
-func SetExpiry(conn redis.Conn, key string, valuePtr interface{}, expiry uint32) {
-	SetInterfacePtr(conn, key, valuePtr)
+// SetExpiryRedis 设置一个数值，并且设置过期时间
+func SetExpiryRedis(conn redis.Conn, key string, valuePtr interface{}, expiry uint32) {
+	SetRedis(conn, key, valuePtr)
 	if expiry > 0 {
 		conn.Do(getRCmd(cEXPIRE), key, expiry)
 	}
 }
 
-// GetInterfacePtr 泛型获得,没有这个key的时候也返回error
-func GetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) error {
+// GetRedis 泛型获得,没有这个key的时候也返回error
+func GetRedis(conn redis.Conn, key string, valuePtr interface{}) error {
 	ret, err := conn.Do(getRCmd(cGET), key)
 	//ret, err := redis.String(conn.Do("get", key))
 	if err == nil && ret != nil {
@@ -174,8 +174,8 @@ func GetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) error {
 	return fmt.Errorf("value not found")
 }
 
-// SetInterfacePtr set a value by interface
-func SetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) {
+// SetRedis set a value by interface
+func SetRedis(conn redis.Conn, key string, valuePtr interface{}) {
 	switch out := valuePtr.(type) {
 	case *int:
 		conn.Do(getRCmd(cSET), key, *out)
@@ -224,8 +224,8 @@ func SetInterfacePtr(conn redis.Conn, key string, valuePtr interface{}) {
 
 }
 
-// SetHashInterfacePtr set hash value
-func SetHashInterfacePtr(conn redis.Conn, hashKey string, key string, valuePtr interface{}) {
+// SetHashRedis set hash value
+func SetHashRedis(conn redis.Conn, hashKey string, key string, valuePtr interface{}) {
 	switch out := valuePtr.(type) {
 	case *int:
 		conn.Do(getRCmd(cHSET), hashKey, key, *out)
