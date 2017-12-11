@@ -8,7 +8,7 @@ import (
 )
 
 func TestRedis(t *testing.T) {
-	rn := NewRedisNode("127.0.0.1:6379", "", 0)
+	rn := NewRedisNode("127.0.0.1:6379", "", 0, true)
 	con := rn.GetRedis()
 	defer rn.Put(con)
 	con.Do("set", "dbtest", "oh..")
@@ -21,7 +21,7 @@ func TestMongo(t *testing.T) {
 }
 
 func TestQuery(t *testing.T) {
-	rn := NewRedisNode("localhost:6379", "", 0)
+	rn := NewRedisNode("localhost:6379", "", 0, true)
 	cb := NewCouchbaseConnection("localhost:8091", "default", "")
 	q := NewRedisCouchbaseQuery(rn, cb)
 	r := rn.GetRedis()
