@@ -84,6 +84,9 @@ func GetHashRedis(conn redis.Conn, hkey string, key string, valuePtr interface{}
 		case *int64:
 			*out, formaterr = redis.Int64(ret, err)
 			break
+		case *uint64:
+			*out, formaterr = redis.Uint64(ret, err)
+			break
 		case *float64:
 			*out, formaterr = redis.Float64(ret, err)
 			break
@@ -144,6 +147,9 @@ func GetRedis(conn redis.Conn, key string, valuePtr interface{}) error {
 		case *int64:
 			*out, formaterr = redis.Int64(ret, err)
 			break
+		case *uint64:
+			*out, formaterr = redis.Uint64(ret, err)
+			break
 		case *float64:
 			*out, formaterr = redis.Float64(ret, err)
 			break
@@ -198,6 +204,8 @@ func SetRedis(conn redis.Conn, key string, valuePtr interface{}) {
 		conn.Do(getRCmd(cSET), key, out)
 	case int32:
 		conn.Do(getRCmd(cSET), key, out)
+	case uint64:
+		conn.Do(getRCmd(cSET), key, out)
 	case int64:
 		conn.Do(getRCmd(cSET), key, out)
 	case float32:
@@ -233,6 +241,8 @@ func SetHashRedis(conn redis.Conn, hashKey string, key string, valuePtr interfac
 		conn.Do(getRCmd(cHSET), hashKey, key, *out)
 	case *int64:
 		conn.Do(getRCmd(cHSET), hashKey, key, *out)
+	case *uint64:
+		conn.Do(getRCmd(cHSET), hashKey, key, *out)
 	case *float32:
 		conn.Do(getRCmd(cHSET), hashKey, key, *out)
 	case *string:
@@ -250,6 +260,8 @@ func SetHashRedis(conn redis.Conn, hashKey string, key string, valuePtr interfac
 		conn.Do(getRCmd(cHSET), hashKey, key, out)
 	case int64:
 		conn.Do(getRCmd(cHSET), hashKey, key, out)
+	case uint64:
+		conn.Do(getRCmd(cHSET), hashKey, key, out)
 	case float32:
 		conn.Do(getRCmd(cHSET), hashKey, key, out)
 	case string:
@@ -257,6 +269,7 @@ func SetHashRedis(conn redis.Conn, hashKey string, key string, valuePtr interfac
 	case float64:
 		conn.Do(getRCmd(cHSET), hashKey, key, out)
 	case []byte:
+		conn.Do(getRCmd(cHSET), hashKey, key, out)
 	case bool:
 		conn.Do(getRCmd(cHSET), hashKey, key, out)
 		break
@@ -281,20 +294,22 @@ func KeyExistsRedis(conn redis.Conn, key string) bool {
 }
 
 // GenKeyIDRedis 获得一个自增长id
-func GenKeyIDRedis(conn redis.Conn, key string, start int64) int64 {
+func GenKeyIDRedis(conn redis.Conn, key string, start uint64) uint64 {
 	exist, error := redis.Bool(conn.Do(getRCmd(cEXISTS), key))
 	if exist && error == nil {
-		retv, error := redis.Int64(conn.Do(getRCmd(cINCRBY), key, 1))
+		retv, error := redis.Uint64(conn.Do(getRCmd(cINCRBY), key, 1))
 		if error == nil {
 			return retv
 		}
-		base.LogError("genid (%s)Error", key)
-		return -1
+		base.LogPanic("genid (%s)Error(%s)", key, error.Error())
+		return 0
 	}
-	if _, err := conn.Do(getRCmd(cSET), key, start); err == nil {
+	_, err := conn.Do(getRCmd(cSET), key, start)
+	if err == nil {
 		return start
 	}
-	return -1
+	base.LogPanic("genid (%s)Error(%s)", key, err.Error())
+	return 0
 }
 
 // DelRedis 删除某个键值
