@@ -34,27 +34,27 @@ func (rc *rediscouchbaseQuery) Set(key string, v interface{}, expiry uint32) {
 	//设置couchbase
 	go rc.couchNode.bucket.Upsert(key, v, expiry)
 }
-func (rc *rediscouchbaseQuery) GenID(key string, start int64) int64 {
+func (rc *rediscouchbaseQuery) GenID(key string, start uint64) uint64 {
 	conn := rc.node.GetRedis()
 	defer rc.node.Put(conn)
 	exist, error := redis.Bool(conn.Do("exists", key))
 	if exist && error == nil {
-		retv, error := redis.Int64(conn.Do("incr", key))
+		retv, error := redis.Uint64(conn.Do("incr", key))
 		if error == nil {
 			rc.couchNode.bucket.Upsert(key, retv, 0)
 		} else {
-			base.LogError("genid (%s)Error", key)
-			return -1
+			base.LogPanic("genid (%s)Error", key)
+			return 0
 		}
 		return retv
 	}
-	counter, _, err := rc.couchNode.bucket.Counter(key, 1, start, 0)
+	counter, _, err := rc.couchNode.bucket.Counter(key, 1, int64(start), 0)
 	if err != nil {
-		base.LogError("GenID (%s) Error (%s) ", key, err.Error())
-		return -1
+		base.LogPanic("GenID (%s) Error (%s) ", key, err.Error())
+		return 0
 	}
 	conn.Do("set", key, counter)
-	return int64(counter)
+	return uint64(counter)
 }
 func (rc *rediscouchbaseQuery) GetObj(key string, obj proto.Message) {
 	var b []byte

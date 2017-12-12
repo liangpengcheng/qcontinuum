@@ -133,5 +133,5 @@ var redisCmd = [][]string{
 }
 
 func getRCmd(cmd int) string {
-	return redisCmd[USECMD][cmd]
+	return redisCmd[cmd][USECMD]
 }
