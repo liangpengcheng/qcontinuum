@@ -37,14 +37,26 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 				Body: allbuf,
 			}
 		*/
-		peer.Connection.Write(allbuf)
+		n, err := peer.Connection.Write(allbuf)
+		if err != nil {
+			base.LogWarn("send error:%s", err.Error())
+		} else {
+			base.LogDebug("send success id:%d,len:%d", msgid, n)
+		}
+	} else {
+		base.LogWarn("msg:%d unmarshal error :%s", msgid, err.Error())
 	}
 	return err
 }
 
 // SendMessageBuffer 发送缓冲区
 func (peer *ClientPeer) SendMessageBuffer(msg []byte) {
-	peer.Connection.Write(msg)
+	n, err := peer.Connection.Write(msg)
+	if err != nil {
+		base.LogWarn("send error:%s", err.Error())
+	} else {
+		base.LogDebug("send success len:%d", n)
+	}
 }
 
 // TransmitMsg 转发消息
@@ -60,7 +72,13 @@ func (peer *ClientPeer) TransmitMsg(msg *Message) {
 			Body: allbuf,
 		}
 	*/
-	peer.Connection.Write(allbuf)
+	n, err := peer.Connection.Write(allbuf)
+	if err != nil {
+		base.LogWarn("send error:%s", err.Error())
+	} else {
+		base.LogDebug("send success len:%d", n)
+	}
+
 }
 
 // ConnectionHandler read messages here
