@@ -54,21 +54,8 @@ func ReadMessage(conn io.Reader) (*MessageHead, []byte, error) {
 func (s *Server) BlockAccept(proc *Processor) {
 	if s.Listener != nil {
 		for {
-			conn, err := s.Listener.Accept()
-			if err == nil {
-				base.LogDebug("incomming connection :%s", conn.RemoteAddr().String())
-				peer := &ClientPeer{
-					Connection:   conn,
-					RedirectProc: make(chan *Processor, 1),
-					Proc:         proc,
-				}
-				event := &Event{
-					ID:   AddEvent,
-					Peer: peer,
-				}
-				proc.EventChan <- event
-				go peer.ConnectionHandler()
-			} else {
+			err := s.BlockAcceptOne(proc)
+			if err != nil {
 				base.LogError("accept error :%s", err.Error())
 				break
 			}
@@ -80,28 +67,24 @@ func (s *Server) BlockAccept(proc *Processor) {
 }
 
 // BlockAcceptOne 接受一个连接
-func (s *Server) BlockAcceptOne(proc *Processor) {
+func (s *Server) BlockAcceptOne(proc *Processor) error {
 	if s.Listener != nil {
-		for {
-			conn, err := s.Listener.Accept()
-			if err == nil {
-				base.LogDebug("incomming connection :%s", conn.RemoteAddr().String())
-				peer := &ClientPeer{
-					Connection:   conn,
-					RedirectProc: make(chan *Processor, 1),
-					Proc:         proc,
-				}
-				event := &Event{
-					ID:   AddEvent,
-					Peer: peer,
-				}
-				proc.EventChan <- event
-				go peer.ConnectionHandler()
-			} else {
-				base.LogError("accept error :%s", err.Error())
-				break
+		conn, err := s.Listener.Accept()
+		if err == nil {
+			base.LogDebug("incomming connection :%s", conn.RemoteAddr().String())
+			peer := &ClientPeer{
+				Connection:   conn,
+				RedirectProc: make(chan *Processor, 1),
+				Proc:         proc,
 			}
+			event := &Event{
+				ID:   AddEvent,
+				Peer: peer,
+			}
+			proc.EventChan <- event
+			go peer.ConnectionHandler()
 		}
-
+		return err
 	}
+	return errors.New("tcpserver accept error :should listen first")
 }
