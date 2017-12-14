@@ -40,8 +40,8 @@ var (
 
 // Processor 消息处理器
 type Processor struct {
-	MessageChan    chan *Message
-	SendChan       chan *Message
+	MessageChan chan *Message
+	//SendChan       chan *Message
 	EventChan      chan *Event
 	FuncChan       chan ProcFunction
 	CallbackMap    map[int32]MsgCallback
@@ -55,14 +55,19 @@ type Processor struct {
 
 // NewProcessor 新建处理器，包含初始化操作
 func NewProcessor() *Processor {
+	return NewProcessorWithLoopTime(24 * time.Hour)
+}
+
+// NewProcessorWithLoopTime 指定定时器
+func NewProcessorWithLoopTime(time time.Duration) *Processor {
 	p := &Processor{
-		MessageChan:   make(chan *Message, 1024),
-		SendChan:      make(chan *Message, 1024),
+		MessageChan: make(chan *Message, 1024),
+		//SendChan:      make(chan *Message, 1024),
 		EventChan:     make(chan *Event, 1024),
 		FuncChan:      make(chan ProcFunction, 64),
 		EventCallback: make(map[int32]EventCallback),
 		CallbackMap:   make(map[int32]MsgCallback),
-		loopTime:      3600000,
+		loopTime:      time,
 		ImmediateMode: false,
 	}
 	return p
@@ -100,6 +105,8 @@ func (p *Processor) AddEventCallback(id int32, callback EventCallback) {
 func (p *Processor) RemoveEventCallback(id int32) {
 	delete(p.EventCallback, id)
 }
+
+/*
 func (p *Processor) send() {
 	for {
 		select {
@@ -110,11 +117,11 @@ func (p *Processor) send() {
 		}
 	}
 }
-
+*/
 // StartProcess 开始处理信息
 // 只有调用了这个借口，处理器才会处理实际的信息，以及实际发送消息
 func (p *Processor) StartProcess() {
-	go p.send()
+	//go p.send()
 	base.LogInfo("processor is starting ")
 	tick := time.Tick(p.loopTime)
 	for {

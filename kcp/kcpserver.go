@@ -39,17 +39,7 @@ func NewKCPServer(host string) (*Server, error) {
 // BlockAccept 阻塞收消息
 func (s *Server) BlockAccept(proc *network.Processor) {
 	for {
-		if conn, err := s.Listener.AcceptKCP(); err == nil {
-			base.LogInfo("remote address:%s", conn.RemoteAddr().String())
-			setupKcp(conn)
-			peer := &network.ClientPeer{
-				Connection:   conn,
-				RedirectProc: make(chan *network.Processor, 1),
-				Proc:         proc,
-			}
-
-			go peer.ConnectionHandler()
-		} else {
+		if err := s.BlockAcceptOne(proc); err != nil {
 			base.LogError("accept error :%s", err.Error())
 			break
 		}
@@ -58,7 +48,7 @@ func (s *Server) BlockAccept(proc *network.Processor) {
 }
 
 // BlockAcceptOne 接受一个连接
-func (s *Server) BlockAcceptOne(proc *network.Processor) {
+func (s *Server) BlockAcceptOne(proc *network.Processor) error {
 	if conn, err := s.Listener.AcceptKCP(); err == nil {
 		base.LogInfo("remote address:%s", conn.RemoteAddr().String())
 		setupKcp(conn)
@@ -69,7 +59,10 @@ func (s *Server) BlockAcceptOne(proc *network.Processor) {
 		}
 
 		go peer.ConnectionHandler()
+	} else {
+		return err
 	}
+	return nil
 }
 
 func setupKcp(conn *_kcp.UDPSession) {
