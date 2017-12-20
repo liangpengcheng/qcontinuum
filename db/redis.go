@@ -84,6 +84,10 @@ func GetHashRedis(conn redis.Conn, hkey string, key string, valuePtr interface{}
 		case *int64:
 			*out, formaterr = redis.Int64(ret, err)
 			break
+		case *uint32:
+			var retu32 int64
+			retu32, formaterr = redis.Int64(ret, err)
+			*out = uint32(retu32)
 		case *uint64:
 			*out, formaterr = redis.Uint64(ret, err)
 			break
@@ -178,6 +182,48 @@ func GetRedis(conn redis.Conn, key string, valuePtr interface{}) error {
 		return nil
 	}
 	return fmt.Errorf("value not found")
+}
+
+// IncrRedis incr value
+func IncrRedis(conn redis.Conn, key string, step interface{}) (int64, error) {
+	switch step.(type) {
+	case int:
+		return redis.Int64(conn.Do(getRCmd(cINCRBY), key, step))
+	case int64:
+		return redis.Int64(conn.Do(getRCmd(cINCRBY), key, step))
+	case int32:
+		return redis.Int64(conn.Do(getRCmd(cINCRBY), key, step))
+	case uint:
+		return redis.Int64(conn.Do(getRCmd(cINCRBY), key, step))
+	case uint32:
+		return redis.Int64(conn.Do(getRCmd(cINCRBY), key, step))
+	case uint64:
+		return redis.Int64(conn.Do(getRCmd(cINCRBY), key, step))
+	default:
+		base.LogError("can't support type")
+		return 0, fmt.Errorf("can't support type")
+	}
+}
+
+// IncrHashRedis incr hash value
+func IncrHashRedis(conn redis.Conn, hkey string, key string, step interface{}) (int64, error) {
+	switch step.(type) {
+	case int:
+		return redis.Int64(conn.Do(getRCmd(cHINCRBY), hkey, key, step))
+	case int64:
+		return redis.Int64(conn.Do(getRCmd(cINCRBY), hkey, key, step))
+	case int32:
+		return redis.Int64(conn.Do(getRCmd(cINCRBY), hkey, key, step))
+	case uint:
+		return redis.Int64(conn.Do(getRCmd(cINCRBY), hkey, key, step))
+	case uint32:
+		return redis.Int64(conn.Do(getRCmd(cINCRBY), hkey, key, step))
+	case uint64:
+		return redis.Int64(conn.Do(getRCmd(cINCRBY), hkey, key, step))
+	default:
+		base.LogError("can't support type")
+		return 0, fmt.Errorf("can't support type")
+	}
 }
 
 // SetRedis set a value by interface
