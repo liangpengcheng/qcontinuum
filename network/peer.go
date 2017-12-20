@@ -15,8 +15,17 @@ import (
 type ClientPeer struct {
 	Connection   net.Conn
 	Flag         int32
-	RedirectProc chan *Processor
+	redirectProc chan *Processor
 	Proc         *Processor
+}
+
+// Redirect 重新设置处理器
+func (peer *ClientPeer) Redirect(proc *Processor) {
+	for len(peer.redirectProc) > 0 {
+		<-peer.redirectProc
+		base.LogWarn("重设处理器队列不为0，请检查逻辑")
+	}
+	peer.redirectProc <- proc
 }
 
 // SendMessage send a message to peer
@@ -39,9 +48,9 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 		*/
 		n, err := peer.Connection.Write(allbuf)
 		if err != nil {
-			base.LogWarn("send error:%s", err.Error())
+			base.LogWarn("send error:%s,%d", err.Error(), n)
 		} else {
-			base.LogDebug("send success id:%d,len:%d", msgid, n)
+			//base.LogDebug("send success id:%d,len:%d", msgid, n)
 		}
 	} else {
 		base.LogWarn("msg:%d unmarshal error :%s", msgid, err.Error())
@@ -53,9 +62,9 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 func (peer *ClientPeer) SendMessageBuffer(msg []byte) {
 	n, err := peer.Connection.Write(msg)
 	if err != nil {
-		base.LogWarn("send error:%s", err.Error())
+		base.LogWarn("send error:%s,&d", err.Error(), n)
 	} else {
-		base.LogDebug("send success len:%d", n)
+		//base.LogDebug("send success len:%d", n)
 	}
 }
 
@@ -74,9 +83,9 @@ func (peer *ClientPeer) TransmitMsg(msg *Message) {
 	*/
 	n, err := peer.Connection.Write(allbuf)
 	if err != nil {
-		base.LogWarn("send error:%s", err.Error())
+		base.LogWarn("send error:%s,%d", err.Error(), n)
 	} else {
-		base.LogDebug("send success len:%d", n)
+		//base.LogDebug("send success len:%d", n)
 	}
 
 }
@@ -94,8 +103,8 @@ func (peer *ClientPeer) ConnectionHandler() {
 
 	for {
 		h, buffer, err := ReadMessage(peer.Connection)
-		if len(peer.RedirectProc) > 0 {
-			peer.Proc = <-peer.RedirectProc
+		if len(peer.redirectProc) > 0 {
+			peer.Proc = <-peer.redirectProc
 
 		}
 		if err != nil {
@@ -123,5 +132,5 @@ func (peer *ClientPeer) ConnectionHandler() {
 		Peer: peer,
 	}
 	peer.Proc.EventChan <- event
-	//base.LogInfo("disconnect %s", peer.Connection.RemoteAddr().String())
+	base.LogInfo("lost connection %s", peer.Connection.RemoteAddr().String())
 }

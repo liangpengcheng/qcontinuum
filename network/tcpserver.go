@@ -3,7 +3,6 @@ package network
 import (
 	"errors"
 	"io"
-	"log"
 	"net"
 
 	"github.com/liangpengcheng/qcontinuum/base"
@@ -37,10 +36,11 @@ func ReadMessage(conn io.Reader) (*MessageHead, []byte, error) {
 		return nil, nil, err
 	}
 	h := ReadHead(buffer)
-	if h.ID > 1024 || h.Length < 0 {
-		log.Printf("message error: id(%d),len(%d)", h.ID, h.Length)
+	if h.ID > 10240 || h.Length < 0 || h.Length > 10240 {
+		base.LogWarn("message error: id(%d),len(%d)", h.ID, h.Length)
 		return nil, nil, errors.New("message not in range")
 	}
+	//base.LogDebug("recv message : id(%d),len(%d)", h.ID, h.Length)
 	buffer, err = ReadFromConnect(conn, int(h.Length))
 	if err != nil {
 
@@ -74,7 +74,7 @@ func (s *Server) BlockAcceptOne(proc *Processor) error {
 			base.LogDebug("incomming connection :%s", conn.RemoteAddr().String())
 			peer := &ClientPeer{
 				Connection:   conn,
-				RedirectProc: make(chan *Processor, 1),
+				redirectProc: make(chan *Processor, 1),
 				Proc:         proc,
 			}
 			event := &Event{

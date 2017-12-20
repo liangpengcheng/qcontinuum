@@ -54,7 +54,7 @@ func (s *Server) BlockAcceptOne(proc *network.Processor) error {
 		setupKcp(conn)
 		peer := &network.ClientPeer{
 			Connection:   conn,
-			RedirectProc: make(chan *network.Processor, 1),
+			redirectProc: make(chan *network.Processor, 1),
 			Proc:         proc,
 		}
 
