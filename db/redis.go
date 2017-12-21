@@ -16,6 +16,9 @@ type RedisNode struct {
 	pool     *redis.Pool
 }
 
+// RedisConn 重新定义
+type RedisConn redis.Conn
+
 // NewRedisNode 创建一个节点
 func NewRedisNode(addr string, pwd string, dbindex int32, redisorssdb bool) *RedisNode {
 	if redisorssdb {
@@ -54,17 +57,17 @@ func NewRedisNode(addr string, pwd string, dbindex int32, redisorssdb bool) *Red
 }
 
 // GetRedis  get a connection
-func (node *RedisNode) GetRedis() redis.Conn {
+func (node *RedisNode) GetRedis() RedisConn {
 	return node.pool.Get()
 }
 
 // Put 放回去
-func (node *RedisNode) Put(conn redis.Conn) {
+func (node *RedisNode) Put(conn RedisConn) {
 	conn.Close()
 }
 
 // GetHashRedis get hash value
-func GetHashRedis(conn redis.Conn, hkey string, key string, valuePtr interface{}) error {
+func GetHashRedis(conn RedisConn, hkey string, key string, valuePtr interface{}) error {
 	ret, err := conn.Do(getRCmd(cHGET), hkey, key)
 	//ret, err := redis.String(conn.Do("get", key))
 	if err == nil && ret != nil {
@@ -123,7 +126,7 @@ func GetHashRedis(conn redis.Conn, hkey string, key string, valuePtr interface{}
 }
 
 // SetExpiryRedis 设置一个数值，并且设置过期时间
-func SetExpiryRedis(conn redis.Conn, key string, valuePtr interface{}, expiry uint32) {
+func SetExpiryRedis(conn RedisConn, key string, valuePtr interface{}, expiry uint32) {
 	SetRedis(conn, key, valuePtr)
 	if expiry > 0 {
 		conn.Do(getRCmd(cEXPIRE), key, expiry)
@@ -131,7 +134,7 @@ func SetExpiryRedis(conn redis.Conn, key string, valuePtr interface{}, expiry ui
 }
 
 // GetRedis 泛型获得,没有这个key的时候也返回error
-func GetRedis(conn redis.Conn, key string, valuePtr interface{}) error {
+func GetRedis(conn RedisConn, key string, valuePtr interface{}) error {
 	ret, err := conn.Do(getRCmd(cGET), key)
 	//ret, err := redis.String(conn.Do("get", key))
 	if err == nil && ret != nil {
@@ -185,7 +188,7 @@ func GetRedis(conn redis.Conn, key string, valuePtr interface{}) error {
 }
 
 // IncrRedis incr value
-func IncrRedis(conn redis.Conn, key string, step interface{}) (int64, error) {
+func IncrRedis(conn RedisConn, key string, step interface{}) (int64, error) {
 	switch step.(type) {
 	case int:
 		return redis.Int64(conn.Do(getRCmd(cINCRBY), key, step))
@@ -206,7 +209,7 @@ func IncrRedis(conn redis.Conn, key string, step interface{}) (int64, error) {
 }
 
 // IncrHashRedis incr hash value
-func IncrHashRedis(conn redis.Conn, hkey string, key string, step interface{}) (int64, error) {
+func IncrHashRedis(conn RedisConn, hkey string, key string, step interface{}) (int64, error) {
 	switch step.(type) {
 	case int:
 		return redis.Int64(conn.Do(getRCmd(cHINCRBY), hkey, key, step))
@@ -227,7 +230,7 @@ func IncrHashRedis(conn redis.Conn, hkey string, key string, step interface{}) (
 }
 
 // SetRedis set a value by interface
-func SetRedis(conn redis.Conn, key string, valuePtr interface{}) {
+func SetRedis(conn RedisConn, key string, valuePtr interface{}) {
 	switch out := valuePtr.(type) {
 	case *int:
 		conn.Do(getRCmd(cSET), key, *out)
@@ -279,7 +282,7 @@ func SetRedis(conn redis.Conn, key string, valuePtr interface{}) {
 }
 
 // SetHashRedis set hash value
-func SetHashRedis(conn redis.Conn, hashKey string, key string, valuePtr interface{}) {
+func SetHashRedis(conn RedisConn, hashKey string, key string, valuePtr interface{}) {
 	switch out := valuePtr.(type) {
 	case *int:
 		conn.Do(getRCmd(cHSET), hashKey, key, *out)
@@ -331,7 +334,7 @@ func SetHashRedis(conn redis.Conn, hashKey string, key string, valuePtr interfac
 }
 
 // KeyExistsRedis 是否存在这个键值
-func KeyExistsRedis(conn redis.Conn, key string) bool {
+func KeyExistsRedis(conn RedisConn, key string) bool {
 	exist, error := redis.Bool(conn.Do(getRCmd(cEXISTS), key))
 	if exist && error == nil {
 		return true
@@ -340,7 +343,7 @@ func KeyExistsRedis(conn redis.Conn, key string) bool {
 }
 
 // GenKeyIDRedis 获得一个自增长id
-func GenKeyIDRedis(conn redis.Conn, key string, start uint64) uint64 {
+func GenKeyIDRedis(conn RedisConn, key string, start uint64) uint64 {
 	exist, error := redis.Bool(conn.Do(getRCmd(cEXISTS), key))
 	if exist && error == nil {
 		retv, error := redis.Uint64(conn.Do(getRCmd(cINCRBY), key, 1))
@@ -359,12 +362,12 @@ func GenKeyIDRedis(conn redis.Conn, key string, start uint64) uint64 {
 }
 
 // DelRedis 删除某个键值
-func DelRedis(conn redis.Conn, key string) {
+func DelRedis(conn RedisConn, key string) {
 	conn.Do(getRCmd(cDEL), key)
 }
 
 // HExistsRedis 是否存在某个hash值
-func HExistsRedis(conn redis.Conn, hashKey, key string) bool {
+func HExistsRedis(conn RedisConn, hashKey, key string) bool {
 
 	exist, error := redis.Bool(conn.Do(getRCmd(cHEXISTS), hashKey, key))
 	if exist && error == nil {
@@ -375,12 +378,12 @@ func HExistsRedis(conn redis.Conn, hashKey, key string) bool {
 }
 
 // HashDelRedis 删除某个hash键值
-func HashDelRedis(conn redis.Conn, hashKey, key string) {
+func HashDelRedis(conn RedisConn, hashKey, key string) {
 	conn.Do(getRCmd(cHDEL), hashKey, key)
 }
 
 // HLenRedis hash长度
-func HLenRedis(conn redis.Conn, hashKey string) uint {
+func HLenRedis(conn RedisConn, hashKey string) uint {
 
 	res, err := conn.Do(getRCmd(cHLEN), hashKey)
 	if err == nil {
