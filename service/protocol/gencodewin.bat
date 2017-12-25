@@ -1,1 +1,0 @@
-..\..\tools\protobuf\win\protoc --go_out=./ service.proto
