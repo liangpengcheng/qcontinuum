@@ -1,6 +1,0 @@
-{
-    "AuthTimeout":15,
-    "UserPasswordDBCacheHost":"192.168.1.8:6379",
-    "UserPasswordDBHost":"192.168.1.8:8091",
-    "ServiceManger":"127.0.0.1:40001"
-}
