@@ -40,9 +40,18 @@ func BytesCombine(pBytes ...[]byte) []byte {
 }
 
 // CheckError print error message if e is not nil
-func CheckError(e error, info string) {
+func CheckError(e error, info string) bool {
 	if e != nil {
-		LogError(info + e.Error())
+		LogError("%s:%v", info, e)
+		return false
+	}
+	return true
+}
+
+// PanicError panic error if e is not nil
+func PanicError(e error, info string) {
+	if e != nil {
+		LogPanic("%s:%v", info, e)
 	}
 }
 
