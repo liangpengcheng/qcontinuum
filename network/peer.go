@@ -3,7 +3,6 @@ package network
 import (
 	"bytes"
 	"encoding/binary"
-	"fmt"
 
 	"net"
 
@@ -94,7 +93,7 @@ func (peer *ClientPeer) TransmitMsg(msg *Message) {
 func (peer *ClientPeer) ConnectionHandler() {
 	defer func() {
 		if err := recover(); err != nil {
-			base.LogError(fmt.Sprint(err))
+			base.LogError("%v", err)
 		}
 	}()
 	if peer.Connection == nil {

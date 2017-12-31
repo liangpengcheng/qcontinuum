@@ -121,6 +121,11 @@ func (p *Processor) send() {
 // StartProcess 开始处理信息
 // 只有调用了这个借口，处理器才会处理实际的信息，以及实际发送消息
 func (p *Processor) StartProcess() {
+	defer func() {
+		if err := recover(); err != nil {
+			base.LogError("%v", err)
+		}
+	}()
 	//go p.send()
 	base.LogInfo("processor is starting ")
 	tick := time.Tick(p.loopTime)
