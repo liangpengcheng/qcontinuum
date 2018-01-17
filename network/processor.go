@@ -42,11 +42,12 @@ var (
 type Processor struct {
 	MessageChan chan *Message
 	//SendChan       chan *Message
-	EventChan      chan *Event
-	FuncChan       chan ProcFunction
-	CallbackMap    map[int32]MsgCallback
-	EventCallback  map[int32]EventCallback
-	updateCallback ProcFunction
+	EventChan        chan *Event
+	FuncChan         chan ProcFunction
+	CallbackMap      map[int32]MsgCallback
+	UnHandledHandler MsgCallback //未注册的消息处理
+	EventCallback    map[int32]EventCallback
+	updateCallback   ProcFunction
 	// 更新时间
 	loopTime time.Duration
 	// ImmediateMode 立即回调消息，如果想要线程安全，必须设置为false，默认为false
@@ -134,6 +135,8 @@ func (p *Processor) StartProcess() {
 		case msg := <-p.MessageChan:
 			if cb, ok := p.CallbackMap[msg.Head.ID]; ok {
 				cb(msg)
+			} else if p.UnHandledHandler != nil {
+				p.UnHandledHandler(msg)
 			} else {
 				base.LogWarn("can't find callback(%d)", msg.Head.ID)
 			}
