@@ -121,6 +121,8 @@ func (peer *ClientPeer) ConnectionHandler() {
 		if peer.Proc.ImmediateMode {
 			if cb, ok := peer.Proc.CallbackMap[msg.Head.ID]; ok {
 				cb(msg)
+			} else if peer.Proc.UnHandledHandler != nil {
+				peer.Proc.UnHandledHandler(msg)
 			}
 		} else {
 			peer.Proc.MessageChan <- msg
