@@ -61,7 +61,7 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 func (peer *ClientPeer) SendMessageBuffer(msg []byte) {
 	n, err := peer.Connection.Write(msg)
 	if err != nil {
-		base.LogWarn("send error:%s,&d", err.Error(), n)
+		base.LogWarn("send error:%s,%d", err.Error(), n)
 	} else {
 		//base.LogDebug("send success len:%d", n)
 	}
