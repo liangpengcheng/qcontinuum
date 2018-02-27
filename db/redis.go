@@ -37,12 +37,12 @@ func NewRedisNode(addr string, pwd string, dbindex int32, redisorssdb bool) *Red
 					return nil, err
 				}
 				if len(pwd) > 0 {
-					if _, err := r.Do(redisCmd[USECMD][cAUTH], pwd); err != nil {
+					if _, err := r.Do(redisCmd[cAUTH][USECMD], pwd); err != nil {
 						base.LogError("redis auth error :%s", err.Error())
 					}
 				}
 				if dbindex > 0 {
-					if _, err := r.Do(redisCmd[USECMD][cSELECT], dbindex); err != nil {
+					if _, err := r.Do(redisCmd[cSELECT][USECMD], dbindex); err != nil {
 						base.LogError("redis select error :%s ", err.Error())
 						return nil, err
 					}
