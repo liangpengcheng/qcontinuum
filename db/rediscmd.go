@@ -69,6 +69,7 @@ var (
 	cLKEYS           = 56
 	cAUTH            = 57
 	cSELECT          = 58
+	cHGETALL         = 59
 )
 var redisCmd = [][]string{
 	{"get", "get"},                           //cGET
@@ -130,8 +131,14 @@ var redisCmd = [][]string{
 	{"keys", "qlist"},                        //cLKEYS
 	{"auth", "auth"},                         //cAUTH
 	{"select", "not support"},                //cSELECT
+	{"hgetall", "hgetall"},                   //cHGETALL
 }
 
 func getRCmd(cmd int) string {
 	return redisCmd[cmd][USECMD]
+}
+
+// GetRCmd 获得命令
+func GetRCmd(cmd int) string {
+	return getRCmd(cmd)
 }
