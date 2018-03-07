@@ -214,15 +214,15 @@ func IncrHashRedis(conn RedisConn, hkey string, key string, step interface{}) (i
 	case int:
 		return redis.Int64(conn.Do(getRCmd(cHINCRBY), hkey, key, step))
 	case int64:
-		return redis.Int64(conn.Do(getRCmd(cINCRBY), hkey, key, step))
+		return redis.Int64(conn.Do(getRCmd(cHINCRBY), hkey, key, step))
 	case int32:
-		return redis.Int64(conn.Do(getRCmd(cINCRBY), hkey, key, step))
+		return redis.Int64(conn.Do(getRCmd(cHINCRBY), hkey, key, step))
 	case uint:
-		return redis.Int64(conn.Do(getRCmd(cINCRBY), hkey, key, step))
+		return redis.Int64(conn.Do(getRCmd(cHINCRBY), hkey, key, step))
 	case uint32:
-		return redis.Int64(conn.Do(getRCmd(cINCRBY), hkey, key, step))
+		return redis.Int64(conn.Do(getRCmd(cHINCRBY), hkey, key, step))
 	case uint64:
-		return redis.Int64(conn.Do(getRCmd(cINCRBY), hkey, key, step))
+		return redis.Int64(conn.Do(getRCmd(cHINCRBY), hkey, key, step))
 	default:
 		base.LogError("can't support type")
 		return 0, fmt.Errorf("can't support type")

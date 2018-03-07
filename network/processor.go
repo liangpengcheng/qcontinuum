@@ -86,7 +86,7 @@ func (p *Processor) AddCallback(id int32, callback MsgCallback) {
 	}
 }
 
-// SetUpdate 设置更新时间，以及更新函数
+// SetUpdate 设置更新时间，以及更新函数,第一个参数，时间的设定，只在调用StartProcess之前调用起作用
 func (p *Processor) SetUpdate(uptime time.Duration, upcall ProcFunction) {
 	p.loopTime = uptime
 	p.updateCallback = upcall
