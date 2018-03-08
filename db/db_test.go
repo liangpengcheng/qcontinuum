@@ -29,8 +29,8 @@ func TestQuery(t *testing.T) {
 	id := q.GenID("idtest", 0)
 	r.Do("del", "idtest")
 	for i := 1; i < 100; i++ {
-		if id2 := q.GenID("idtest", 0); id+int64(i) != id2 {
-			t.Errorf("gen id error,%d ~ %d", id+int64(i), id2)
+		if id2 := q.GenID("idtest", 0); id+uint64(i) != id2 {
+			t.Errorf("gen id error,%d ~ %d", id+uint64(i), id2)
 		}
 		if i%3 == 0 {
 			r.Do("del", "idtest")
