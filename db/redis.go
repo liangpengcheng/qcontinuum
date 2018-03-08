@@ -144,7 +144,8 @@ func IncrExpiryRedis(conn RedisConn, key string, value interface{}, expiry uint3
 	if expiry > 0 {
 		conn.Send(getRCmd(cEXPIRE), key, expiry)
 	}
-	ret, err := redis.Int64(conn.Do(getRCmd(cEXEC)))
+	conn.Flush()
+	ret, err := redis.Int64(conn.Receive())
 	base.CheckError(err, "redis incr ")
 	return ret
 }
