@@ -71,6 +71,7 @@ var (
 	cSELECT          = 58
 	cHGETALL         = 59
 	cEXEC            = 60
+	cMULTI           = 61
 )
 var redisCmd = [][]string{
 	{"get", "get"},                           //cGET
@@ -134,6 +135,7 @@ var redisCmd = [][]string{
 	{"select", "not support"},                //cSELECT
 	{"hgetall", "hgetall"},                   //cHGETALL
 	{"exec", "exec"},                         //cEXEC
+	{"multi", "multi"},                       //cMULTI
 }
 
 func getRCmd(cmd int) string {
