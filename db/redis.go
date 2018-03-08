@@ -113,7 +113,7 @@ func GetHashRedis(conn RedisConn, hkey string, key string, valuePtr interface{})
 			proto.Unmarshal(bytes, out)
 			break
 		default:
-			base.LogError("can't support type")
+			base.LogPanic("can't support type")
 			break
 		}
 		if formaterr != nil {
@@ -125,12 +125,28 @@ func GetHashRedis(conn RedisConn, hkey string, key string, valuePtr interface{})
 
 }
 
-// SetExpiryRedis 设置一个数值，并且设置过期时间
-func SetExpiryRedis(conn RedisConn, key string, valuePtr interface{}, expiry uint32) {
-	SetRedis(conn, key, valuePtr)
-	if expiry > 0 {
-		conn.Do(getRCmd(cEXPIRE), key, expiry)
+// SetExpiryRedis 设置一个数值，并且设置过期时间,如果只设置一个过期时间value设置为nil
+func SetExpiryRedis(conn RedisConn, key string, value interface{}, expiry uint32) {
+	if value != nil {
+		conn.Send(getRCmd(cSET), key, value)
 	}
+	if expiry > 0 {
+		conn.Send(getRCmd(cEXPIRE), key, expiry)
+	}
+	conn.Flush()
+}
+
+// IncrExpiryRedis 设置一个数值，并且设置过期时间,如果只设置一个过期时间value设置为nil
+func IncrExpiryRedis(conn RedisConn, key string, value interface{}, expiry uint32) int64 {
+	if value != nil {
+		conn.Send(getRCmd(cINCRBY), key, value)
+	}
+	if expiry > 0 {
+		conn.Send(getRCmd(cEXPIRE), key, expiry)
+	}
+	ret, err := redis.Int64(conn.Do(getRCmd(cEXEC)))
+	base.CheckError(err, "redis incr ")
+	return ret
 }
 
 // GetRedis 泛型获得,没有这个key的时候也返回error
@@ -176,7 +192,7 @@ func GetRedis(conn RedisConn, key string, valuePtr interface{}) error {
 			proto.Unmarshal(bytes, out)
 			break
 		default:
-			base.LogError("can't support type")
+			base.LogPanic("can't support type")
 			break
 		}
 		if formaterr != nil {
@@ -203,7 +219,7 @@ func IncrRedis(conn RedisConn, key string, step interface{}) (int64, error) {
 	case uint64:
 		return redis.Int64(conn.Do(getRCmd(cINCRBY), key, step))
 	default:
-		base.LogError("can't support type")
+		base.LogPanic("can't support type")
 		return 0, fmt.Errorf("can't support type")
 	}
 }
@@ -224,7 +240,7 @@ func IncrHashRedis(conn RedisConn, hkey string, key string, step interface{}) (i
 	case uint64:
 		return redis.Int64(conn.Do(getRCmd(cHINCRBY), hkey, key, step))
 	default:
-		base.LogError("can't support type")
+		base.LogPanic("can't support type")
 		return 0, fmt.Errorf("can't support type")
 	}
 }
@@ -275,7 +291,7 @@ func SetRedis(conn RedisConn, key string, valuePtr interface{}) {
 		}
 		break
 	default:
-		base.LogError("can't support type")
+		base.LogPanic("can't support type")
 		break
 	}
 
