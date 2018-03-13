@@ -62,3 +62,41 @@ func IsNumberString(s string) bool {
 	}
 	return false
 }
+
+// Ato64 string -> int64
+func Ato64(s string) int64 {
+	i, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return 0
+	}
+	return i
+}
+
+// Ato32 string -> int32
+func Ato32(s string) int32 {
+	i, err := strconv.Atoi(s)
+	if err != nil {
+		return 0
+	}
+	return int32(i)
+}
+
+// Realerr 返回一个非nil的错误(如果有的话)
+func Realerr(err1 error, err2 error) error {
+	if err1 != nil {
+		return err1
+	} else if err2 != nil {
+		return err2
+	} else {
+		return nil
+	}
+}
+
+// NotNegative 返回一个非负数
+// 主要处理数值的下限问题
+func NotNegative(i int) int {
+	if i >= 0 {
+		return i
+	}
+	return 0
+}
