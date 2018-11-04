@@ -45,6 +45,7 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 				Body: allbuf,
 			}
 		*/
+		//peer.Connection.Send()
 		n, err := peer.Connection.Write(allbuf)
 		if err != nil {
 			base.LogWarn("send error:%s,%d", err.Error(), n)
