@@ -2,8 +2,11 @@ package base
 
 import (
 	"bytes"
+	"os"
+	"os/signal"
 	"reflect"
 	"strconv"
+	"syscall"
 	"unsafe"
 )
 
@@ -99,4 +102,30 @@ func NotNegative(i int) int {
 		return i
 	}
 	return 0
+}
+
+// OnExit set exit callback
+func OnExit(onexit func()) {
+	// Go signal notification works by sending `os.Signal`
+	// values on a channel. We'll create a channel to
+	// receive these notifications (we'll also make one to
+	// notify us when the program can exit).
+	sigs := make(chan os.Signal, 1)
+	done := make(chan bool, 1)
+	// `signal.Notify` registers the given channel to
+	// receive notifications of the specified signals.
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	// This goroutine executes a blocking receive for
+	// signals. When it gets one it'll print it out
+	// and then notify the program that it can finish.
+	go func() {
+		sig := <-sigs
+		LogDebug("exiting %v", sig)
+		onexit()
+		LogDebug("exited %v", sig)
+		done <- true
+	}()
+
+	<-done
+
 }
