@@ -16,6 +16,7 @@ type ClientPeer struct {
 	Flag         int32
 	redirectProc chan *Processor
 	Proc         *Processor
+	ID           int64
 }
 
 func NewTcpConnection(address string, proc *Processor) (client *ClientPeer, err error) {
