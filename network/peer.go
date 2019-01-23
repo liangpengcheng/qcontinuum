@@ -16,6 +16,7 @@ type ClientPeer struct {
 	Flag         int32
 	redirectProc chan *Processor
 	Proc         *Processor
+	ID           int64
 }
 
 // Redirect 重新设置处理器
