@@ -18,6 +18,18 @@ type ClientPeer struct {
 	Proc         *Processor
 }
 
+func NewTcpConnection(address string, proc *Processor) (client *ClientPeer, err error) {
+
+	socket, err := net.Dial("tcp", address)
+	if err != nil {
+		return nil, err
+	}
+	client.Connection = socket
+	client.Proc = proc
+	return client, nil
+
+}
+
 // Redirect 重新设置处理器
 func (peer *ClientPeer) Redirect(proc *Processor) {
 	for len(peer.redirectProc) > 0 {
