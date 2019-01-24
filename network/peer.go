@@ -25,8 +25,10 @@ func NewTcpConnection(address string, proc *Processor) (client *ClientPeer, err 
 	if err != nil {
 		return nil, err
 	}
-	client.Connection = socket
-	client.Proc = proc
+	client = &ClientPeer{
+		Connection: socket,
+		Proc:       proc,
+	}
 	return client, nil
 
 }
