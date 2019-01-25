@@ -3,6 +3,7 @@ package network
 import (
 	"bytes"
 	"encoding/binary"
+	"time"
 
 	"net"
 
@@ -17,6 +18,21 @@ type ClientPeer struct {
 	redirectProc chan *Processor
 	Proc         *Processor
 	ID           int64
+}
+
+func (c *ClientPeer) CheckAfter(t time.Duration) {
+	go func() {
+		time.AfterFunc(t, func() {
+			if c.Proc != nil {
+				if c.ID == 0 {
+					c.Proc.FuncChan <- func() {
+						base.LogWarn("auth timeout %v", c.Connection)
+						c.Connection.Close()
+					}
+				}
+			}
+		})
+	}()
 }
 
 func NewTcpConnection(address string, proc *Processor) (client *ClientPeer, err error) {
