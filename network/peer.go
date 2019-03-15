@@ -34,6 +34,11 @@ func (c *ClientPeer) CheckAfter(t time.Duration) {
 		})
 	}()
 }
+func (c *ClientPeer) Close() {
+	if c.Connection != nil {
+		c.Connection.Close()
+	}
+}
 
 func NewTcpConnection(address string, proc *Processor) (client *ClientPeer, err error) {
 
