@@ -58,8 +58,8 @@ func (ws *WebSocketPeer) SetWriteDeadline(t time.Time) error {
 	return ws.Connection.SetWriteDeadline(t)
 }
 func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
-	notallowed := r.MethodNotAllowed
-	r.MethodNotAllowed = func(ctx *fasthttp.RequestCtx) {
+	notfound := r.NotFound
+	r.NotFound = func(ctx *fasthttp.RequestCtx) {
 		if base.String(ctx.Path()) == path {
 			err := upgrader.Upgrade(ctx, func(ws *websocket.Conn) {
 				defer ws.Close()
@@ -78,7 +78,7 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 			})
 			base.CheckError(err, "websocket")
 		} else {
-			notallowed(ctx)
+			notfound(ctx)
 		}
 	}
 }
