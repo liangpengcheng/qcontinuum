@@ -22,8 +22,6 @@ type MessageHead struct {
 // 读取消息头
 func ReadHead(src []byte) MessageHead {
 	buf := bytes.NewBuffer(src)
-
-	buf.Write(src)
 	var head MessageHead
 	binary.Read(buf, binary.LittleEndian, &head.Length)
 	binary.Read(buf, binary.LittleEndian, &head.ID)

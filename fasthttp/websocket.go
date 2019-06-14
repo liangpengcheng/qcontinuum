@@ -23,6 +23,7 @@ func (ws *WebSocketPeer) Write(data []byte) (n int, err error) {
 	return len(data), ws.Connection.WriteMessage(websocket.BinaryMessage, data)
 }
 func (ws *WebSocketPeer) Read(msg []byte) (n int, err error) {
+
 	mt, content, err := ws.Connection.ReadMessage()
 	if mt == websocket.BinaryMessage {
 		copy(msg, content)
@@ -74,7 +75,40 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 					Peer: peer,
 				}
 				proc.EventChan <- event
-				peer.ConnectionHandler()
+				for {
+					mt, content, err := ws.ReadMessage()
+					if err != nil {
+						base.LogError("read websocket message error %v", err)
+						continue
+					}
+					hb := content[:8]
+					body := content[8:]
+					if mt == websocket.BinaryMessage {
+						h := network.ReadHead(hb)
+						if h.ID > 10000000 || h.Length < 0 || h.Length > 10240 {
+							base.LogWarn("message error: id(%d),len(%d)", h.ID, h.Length)
+							continue
+						}
+						msg := &network.Message{
+							Peer: peer,
+							Head: h,
+							Body: body,
+						}
+						if proc.ImmediateMode {
+							if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
+								cb(msg)
+							} else if proc.UnHandledHandler != nil {
+								proc.UnHandledHandler(msg)
+							}
+						} else {
+							proc.MessageChan <- msg
+						}
+
+					} else {
+						base.LogWarn("unsupport message type")
+					}
+				}
+				//peer.ConnectionHandler()
 			})
 			base.CheckError(err, "websocket")
 		} else {
