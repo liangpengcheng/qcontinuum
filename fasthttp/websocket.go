@@ -75,11 +75,19 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 					Peer: peer,
 				}
 				proc.EventChan <- event
+				defer func() {
+					leaveEvent := &network.Event{
+						ID:   network.RemoveEvent,
+						Peer: peer,
+					}
+					proc.EventChan <- leaveEvent
+				}()
 				for {
 					mt, content, err := ws.ReadMessage()
 					if err != nil {
-						base.LogError("read websocket message error %v", err)
-						continue
+
+						//base.LogError("read websocket message error %v", err)
+						return
 					}
 					hb := content[:8]
 					body := content[8:]
