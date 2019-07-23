@@ -3,6 +3,7 @@ package fasthttp
 import (
 	"errors"
 	"net"
+	"net/http"
 	"time"
 
 	"github.com/fasthttp/router"
@@ -62,8 +63,14 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 	notfound := r.NotFound
 	r.NotFound = func(ctx *fasthttp.RequestCtx) {
 		if base.String(ctx.Path()) == path {
+			defer func() {
+				if err := recover(); err != nil {
+					base.LogError("%v", err)
+				}
+			}()
 			err := upgrader.Upgrade(ctx, func(ws *websocket.Conn) {
 				defer ws.Close()
+
 				peer := &network.ClientPeer{
 					Connection: &WebSocketPeer{
 						Connection: ws,
@@ -120,7 +127,11 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 			})
 			base.CheckError(err, "websocket")
 		} else {
-			notfound(ctx)
+			if notfound != nil {
+				notfound(ctx)
+			} else {
+				ctx.SetStatusCode(http.StatusNotFound)
+			}
 		}
 	}
 }
