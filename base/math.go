@@ -51,3 +51,11 @@ func MinInt32(x int32, y int32) int32 {
 	}
 	return y
 }
+
+// MinUInt return min int
+func MinUInt(x uint32, y uint32) uint32 {
+	if x < y {
+		return x
+	}
+	return y
+}

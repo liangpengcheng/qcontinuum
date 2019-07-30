@@ -114,7 +114,7 @@ func OnExit(onexit func()) {
 	done := make(chan bool, 1)
 	// `signal.Notify` registers the given channel to
 	// receive notifications of the specified signals.
-	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigs, syscall.SIGHUP, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
 	// This goroutine executes a blocking receive for
 	// signals. When it gets one it'll print it out
 	// and then notify the program that it can finish.
