@@ -14,9 +14,10 @@ import (
 	"github.com/fasthttp/websocket"
 )
 
-var upgrader = websocket.FastHTTPUpgrader{}
-u.CheckOrigin = func(ctx *fasthttp.RequestCtx){
-	return true
+var upgrader = websocket.FastHTTPUpgrader{
+	CheckOrigin: func(ctx *fasthttp.RequestCtx) bool {
+		return true
+	},
 }
 type WebSocketPeer struct {
 	Connection *websocket.Conn
