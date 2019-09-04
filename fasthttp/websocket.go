@@ -15,7 +15,9 @@ import (
 )
 
 var upgrader = websocket.FastHTTPUpgrader{}
-
+u.CheckOrigin = func(ctx *fasthttp.RequestCtx){
+	return true
+}
 type WebSocketPeer struct {
 	Connection *websocket.Conn
 }
@@ -59,7 +61,9 @@ func (ws *WebSocketPeer) SetReadDeadline(t time.Time) error {
 func (ws *WebSocketPeer) SetWriteDeadline(t time.Time) error {
 	return ws.Connection.SetWriteDeadline(t)
 }
+
 func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
+	
 	notfound := r.NotFound
 	r.NotFound = func(ctx *fasthttp.RequestCtx) {
 		if base.String(ctx.Path()) == path {
