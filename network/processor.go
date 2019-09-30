@@ -1,6 +1,7 @@
 package network
 
 import (
+	"runtime/debug"
 	"time"
 
 	"github.com/liangpengcheng/qcontinuum/base"
@@ -125,6 +126,8 @@ func (p *Processor) StartProcess() {
 	defer func() {
 		if err := recover(); err != nil {
 			base.LogError("%v", err)
+			base.LogError("stacks%s", debug.Stack())
+
 		}
 	}()
 	//go p.send()
