@@ -59,3 +59,16 @@ func MinUInt(x uint32, y uint32) uint32 {
 	}
 	return y
 }
+
+func ABS(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+func ABSInt32(x int32) int32 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
