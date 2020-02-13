@@ -8,6 +8,7 @@ import (
 
 var logFile *os.File
 var logger *log.Logger
+var logHead string
 
 // InitLogFile 初始化Log 文件，不调用的话，就不会写入文件
 func InitLogFile(filename string) {
@@ -28,9 +29,12 @@ func CloseLogFile() {
 }
 
 func _logFormat(prefix string, format string, v ...interface{}) {
-	s := fmt.Sprintf(prefix+format, v...)
+	s := fmt.Sprintf(logHead+prefix+format, v...)
 	if logger != nil {
 		logger.Printf(s)
 	}
 	consoleLog(s)
+}
+func InitLog(system string) {
+	logHead = "[" + system + "]:"
 }
