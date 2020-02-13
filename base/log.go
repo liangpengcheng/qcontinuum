@@ -36,5 +36,5 @@ func _logFormat(prefix string, format string, v ...interface{}) {
 	consoleLog(s)
 }
 func InitLog(system string) {
-	logHead = "[" + system + "]:"
+	logHead = textColor(TextMagenta, "["+system+"]:")
 }
