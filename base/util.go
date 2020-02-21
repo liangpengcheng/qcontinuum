@@ -2,11 +2,13 @@ package base
 
 import (
 	"bytes"
+	"math/rand"
 	"os"
 	"os/signal"
 	"reflect"
 	"strconv"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -128,4 +130,21 @@ func OnExit(onexit func()) {
 
 	<-done
 
+}
+
+func RandomString(l int) string {
+	var result bytes.Buffer
+	var temp string
+	for i := 0; i < l; {
+		if string(RandInt(65, 90)) != temp {
+			temp = string(RandInt(65, 90))
+			result.WriteString(temp)
+			i++
+		}
+	}
+	return result.String()
+}
+func RandInt(min int, max int) int {
+	rand.Seed(time.Now().UTC().UnixNano())
+	return min + rand.Intn(max-min)
 }
