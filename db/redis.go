@@ -113,8 +113,7 @@ func GetHashRedis(conn RedisConn, hkey string, key string, valuePtr interface{})
 			proto.Unmarshal(bytes, out)
 			break
 		default:
-			base.LogPanic("can't support type")
-			break
+			return fmt.Errorf("can't support type")
 		}
 		if formaterr != nil {
 			return fmt.Errorf("type error when db.get")
