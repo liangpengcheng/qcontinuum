@@ -2,6 +2,7 @@ package ginhttp
 
 import (
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -21,14 +22,15 @@ func (ws *WebSocketPeer) Write(data []byte) (n int, err error) {
 }
 func (ws *WebSocketPeer) Read(msg []byte) (n int, err error) {
 
-	mt, content, err := ws.Connection.ReadMessage()
-	if mt == websocket.BinaryMessage {
-		if err == nil {
-			copy(msg, content)
-			return base.MinInt(len(msg), len(content)), nil
-		} else {
-			return 0, err
-		}
+	var r io.Reader
+	_, r, err = ws.Connection.NextReader()
+	if err != nil {
+		return 0, err
+	}
+	n, err = io.ReadAtLeast(r, msg, len(msg))
+
+	if err == nil {
+		return
 	} else {
 		return 0, errors.New("can't deal this kind  of message")
 	}
