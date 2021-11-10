@@ -23,8 +23,12 @@ func (ws *WebSocketPeer) Read(msg []byte) (n int, err error) {
 
 	mt, content, err := ws.Connection.ReadMessage()
 	if mt == websocket.BinaryMessage {
-		copy(msg, content)
-		return len(content), nil
+		if err == nil {
+			copy(msg, content)
+			return base.MinInt(len(msg), len(content)), nil
+		} else {
+			return 0, err
+		}
 	} else {
 		return 0, errors.New("can't deal this kind  of message")
 	}
