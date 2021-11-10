@@ -175,3 +175,54 @@ func (peer *ClientPeer) ConnectionHandler() {
 	peer.Proc.EventChan <- event
 	base.LogInfo("lost connection %s", peer.Connection.RemoteAddr().String())
 }
+
+// ConnectionHandler read messages here
+func (peer *ClientPeer) ConnectionHandlerWithPreFunc(f func()) {
+	defer func() {
+		if err := recover(); err != nil {
+			base.LogError("%v", err)
+		}
+	}()
+	if peer.Connection == nil {
+		base.LogError("connection is nil")
+	}
+
+	for {
+		f()
+		h, buffer, err := ReadMessage(peer.Connection)
+		if len(buffer) == 0 {
+			continue
+		}
+		if len(peer.redirectProc) > 0 {
+			peer.Proc = <-peer.redirectProc
+
+		}
+		if err != nil {
+			//base.LogInfo("socket read error %s,%s", peer.Connection.RemoteAddr().String(), err.Error())
+			//peer.Connection.Close()
+			//peer.Connection = nil
+			break
+		}
+		msg := &Message{
+			Peer: peer,
+			Head: *h,
+			Body: buffer,
+		}
+		//是否立即处理这个消息，如果立即处理的话，就在当前线程处理了，小心线程安全问题
+		if peer.Proc.ImmediateMode {
+			if cb, ok := peer.Proc.CallbackMap[msg.Head.ID]; ok {
+				cb(msg)
+			} else if peer.Proc.UnHandledHandler != nil {
+				peer.Proc.UnHandledHandler(msg)
+			}
+		} else {
+			peer.Proc.MessageChan <- msg
+		}
+	}
+	event := &Event{
+		ID:   RemoveEvent,
+		Peer: peer,
+	}
+	peer.Proc.EventChan <- event
+	base.LogInfo("lost connection %s", peer.Connection.RemoteAddr().String())
+}

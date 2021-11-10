@@ -15,6 +15,7 @@ import (
 
 type WebSocketPeer struct {
 	Connection *websocket.Conn
+	IOReader   io.Reader
 }
 
 func (ws *WebSocketPeer) Write(data []byte) (n int, err error) {
@@ -22,12 +23,7 @@ func (ws *WebSocketPeer) Write(data []byte) (n int, err error) {
 }
 func (ws *WebSocketPeer) Read(msg []byte) (n int, err error) {
 
-	var r io.Reader
-	_, r, err = ws.Connection.NextReader()
-	if err != nil {
-		return 0, err
-	}
-	n, err = io.ReadAtLeast(r, msg, len(msg))
+	n, err = io.ReadAtLeast(ws.IOReader, msg, len(msg))
 
 	if err == nil {
 		return
@@ -78,17 +74,23 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 		}
 		defer ws.Close()
 		base.LogInfo("new webclient connected :%s", ws.RemoteAddr().String())
+		wsConnection := &WebSocketPeer{
+			Connection: ws,
+		}
 		peer := &network.ClientPeer{
-			Connection: &WebSocketPeer{
-				Connection: ws,
-			},
-			Proc: proc,
+			Connection: wsConnection,
+			Proc:       proc,
 		}
 		event := &network.Event{
 			ID:   network.AddEvent,
 			Peer: peer,
 		}
 		proc.EventChan <- event
-		peer.ConnectionHandler()
+		peer.ConnectionHandlerWithPreFunc(func() {
+			_, wsConnection.IOReader, err = ws.NextReader()
+			if err != nil {
+
+			}
+		})
 	})
 }
