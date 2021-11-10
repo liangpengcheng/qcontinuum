@@ -31,8 +31,8 @@ func ReadHead(src []byte) MessageHead {
 // ReadFromConnect 读取消息
 func ReadFromConnect(conn io.Reader, length int) ([]byte, error) {
 	data := make([]byte, length)
-	len, err := io.ReadFull(conn, data)
-	if err == nil && len == length {
+	_, err := io.ReadFull(conn, data)
+	if err == nil {
 		return data, nil
 	}
 	return nil, err
