@@ -139,6 +139,9 @@ func (peer *ClientPeer) ConnectionHandler() {
 
 	for {
 		h, buffer, err := ReadMessage(peer.Connection)
+		if len(buffer) == 0 {
+			continue
+		}
 		if len(peer.redirectProc) > 0 {
 			peer.Proc = <-peer.redirectProc
 
