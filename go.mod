@@ -12,14 +12,15 @@ require (
 	github.com/fasthttp/router v0.5.0
 	github.com/fasthttp/websocket v1.4.0
 	github.com/garyburd/redigo v1.6.0
-	github.com/golang/protobuf v1.3.2
+	github.com/gin-gonic/gin v1.7.4
+	github.com/golang/protobuf v1.3.3
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/google/uuid v1.1.1 // indirect
+	github.com/gorilla/websocket v1.4.2
 	github.com/klauspost/reedsolomon v1.9.2 // indirect
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
-	github.com/stretchr/testify v1.4.0 // indirect
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
 	github.com/templexxx/xor v0.0.0-20181023030647-4e92f724b73b // indirect
 	github.com/tjfoc/gmsm v1.0.1 // indirect
