@@ -85,6 +85,13 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 			ID:   network.AddEvent,
 			Peer: peer,
 		}
+		defer func() {
+			leaveEvent := &network.Event{
+				ID:   network.RemoveEvent,
+				Peer: peer,
+			}
+			proc.EventChan <- leaveEvent
+		}()
 		proc.EventChan <- event
 		peer.ConnectionHandlerWithPreFunc(func() {
 			_, wsConnection.IOReader, err = ws.NextReader()
