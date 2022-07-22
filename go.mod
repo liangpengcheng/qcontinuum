@@ -24,10 +24,10 @@ require (
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
 	github.com/templexxx/xor v0.0.0-20181023030647-4e92f724b73b // indirect
 	github.com/tjfoc/gmsm v1.0.1 // indirect
-	github.com/valyala/fasthttp v1.4.0
+	github.com/valyala/fasthttp v1.34.0
 	github.com/xtaci/kcp-go v5.4.4+incompatible
 	github.com/xtaci/lossyconn v0.0.0-20190602105132-8df528c0c9ae // indirect
-	golang.org/x/net v0.0.0-20190404232315-eb5bcb51f2a3
+	golang.org/x/net v0.0.0-20220225172249-27dd8689420f
 	gopkg.in/check.v1 v1.0.0-20180628173108-788fd7840127 // indirect
 	gopkg.in/couchbase/gocb.v1 v1.6.2
 	gopkg.in/couchbase/gocbcore.v7 v7.1.13 // indirect
