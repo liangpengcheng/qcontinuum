@@ -1,5 +1,3 @@
-//+build release
-
 package base
 
 func LogDebug(format string, v ...interface{}) {
@@ -7,18 +5,20 @@ func LogDebug(format string, v ...interface{}) {
 }
 
 func LogInfo(format string, v ...interface{}) {
-	_logFormat(" INFO ", format, v...)
+	// _logFormat(" INFO ", format, v...)
+	Zap().Sugar().Infof(format, v)
 }
 
 func LogWarn(format string, v ...interface{}) {
-	_logFormat(Yellow(" WARN "), format, v...)
+	// _logFormat(Yellow(" WARN "), format, v...)
+	Zap().Sugar().Warnf(format, v)
 }
 
 func LogError(format string, v ...interface{}) {
-	_logFormat(Red("ERROR "), format, v...)
+	// _logFormat(Red("ERROR "), format, v...)
+	Zap().Sugar().Errorf(format, v)
 }
 
 func LogPanic(format string, v ...interface{}) {
-	_logFormat(Red("PANIC "), format, v...)
-	panic("")
+	Zap().Sugar().Panicf(format, v)
 }
