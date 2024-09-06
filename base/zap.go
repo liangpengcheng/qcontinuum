@@ -17,7 +17,7 @@ func init() {
 
 	logPath := flag.String("logpath", "", "log file path")
 	flag.Parse()
-	if logPath != "" {
+	if logPath != nil && *logPath != "" {
 		// 创建文件写入器
 		file, _ := os.Create(*logPath)
 		writeSyncer := zapcore.AddSync(file)
