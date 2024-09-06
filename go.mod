@@ -26,12 +26,8 @@ require (
 	github.com/valyala/fasthttp v1.34.0
 	github.com/xtaci/kcp-go v5.4.4+incompatible
 	github.com/xtaci/lossyconn v0.0.0-20190602105132-8df528c0c9ae // indirect
-
-	golang.org/x/net v0.7.0
-
 	go.uber.org/zap v1.27.0
-
-
+	golang.org/x/net v0.7.0
 	gopkg.in/couchbase/gocb.v1 v1.6.2
 	gopkg.in/couchbase/gocbcore.v7 v7.1.13 // indirect
 	gopkg.in/couchbaselabs/gocbconnstr.v1 v1.0.3 // indirect
