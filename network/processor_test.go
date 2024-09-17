@@ -25,15 +25,15 @@ func TestProcessor(t *testing.T) {
 func TestTcp4Server(t *testing.T) {
 	serv, err := NewTCP4Server(":7878")
 	if err != nil {
-		base.LogError(err.Error())
+		base.Zap().Sugar().Errorf(err.Error())
 	}
 	proc := NewProcessor()
 	proc.AddEventCallback(AddEvent, func(event *Event) {
-		base.LogDebug("new user is connected")
+		base.Zap().Sugar().Debugf("new user is connected")
 	})
 	proc.AddEventCallback(RemoveEvent, func(event *Event) {
 		//一个连接断线后，退出测试
-		base.LogDebug("user disconnected")
+		base.Zap().Sugar().Debugf("user disconnected")
 		proc.EventChan <- &Event{
 			ID:    ExitEvent,
 			Param: "exit loop",
@@ -42,7 +42,7 @@ func TestTcp4Server(t *testing.T) {
 	go func() {
 		conn, err := net.Dial("tcp", "127.0.0.1:7878")
 		if err != nil {
-			base.LogError("dail error :%s", err.Error())
+			base.Zap().Sugar().Errorf("dail error :%s", err.Error())
 			proc.EventChan <- &Event{
 				ID:    ExitEvent,
 				Param: "dail failed",
@@ -62,11 +62,11 @@ func TestWebSocket(t *testing.T) {
 	time.Sleep(1 * time.Second)
 	proc := NewProcessor()
 	proc.AddEventCallback(AddEvent, func(event *Event) {
-		base.LogDebug("new ws user is connected")
+		base.Zap().Sugar().Debugf("new ws user is connected")
 	})
 	proc.AddEventCallback(RemoveEvent, func(event *Event) {
 		//一个连接断线后，退出测试
-		base.LogDebug("ws user disconnected")
+		base.Zap().Sugar().Debugf("ws user disconnected")
 		proc.EventChan <- &Event{
 			ID:    ExitEvent,
 			Param: "exit loop",

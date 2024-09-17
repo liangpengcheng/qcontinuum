@@ -69,7 +69,7 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 	router.GET("/ws", func(c *gin.Context) {
 		ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
-			base.LogError("upgrade:", err)
+			base.Zap().Sugar().Errorf("upgrade:", err)
 			return
 		}
 		defer ws.Close()

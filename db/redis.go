@@ -33,17 +33,17 @@ func NewRedisNode(addr string, pwd string, dbindex int32, redisorssdb bool) *Red
 			Dial: func() (redis.Conn, error) {
 				r, err := redis.Dial("tcp", addr)
 				if err != nil {
-					base.LogError("redis connect error:%s", err.Error())
+					base.Zap().Sugar().Errorf("redis connect error:%s", err.Error())
 					return nil, err
 				}
 				if len(pwd) > 0 {
 					if _, err := r.Do(redisCmd[cAUTH][USECMD], pwd); err != nil {
-						base.LogError("redis auth error :%s", err.Error())
+						base.Zap().Sugar().Errorf("redis auth error :%s", err.Error())
 					}
 				}
 				if dbindex > 0 {
 					if _, err := r.Do(redisCmd[cSELECT][USECMD], dbindex); err != nil {
-						base.LogError("redis select error :%s ", err.Error())
+						base.Zap().Sugar().Errorf("redis select error :%s ", err.Error())
 						return nil, err
 					}
 				}
@@ -192,7 +192,7 @@ func GetRedis(conn RedisConn, key string, valuePtr interface{}) error {
 			proto.Unmarshal(bytes, out)
 			break
 		default:
-			base.LogPanic("can't support type")
+			base.Zap().Sugar().Panicf("can't support type")
 			break
 		}
 		if formaterr != nil {
@@ -219,7 +219,7 @@ func IncrRedis(conn RedisConn, key string, step interface{}) (int64, error) {
 	case uint64:
 		return redis.Int64(conn.Do(getRCmd(cINCRBY), key, step))
 	default:
-		base.LogPanic("can't support type")
+		base.Zap().Sugar().Panicf("can't support type")
 		return 0, fmt.Errorf("can't support type")
 	}
 }
@@ -240,7 +240,7 @@ func IncrHashRedis(conn RedisConn, hkey string, key string, step interface{}) (i
 	case uint64:
 		return redis.Int64(conn.Do(getRCmd(cHINCRBY), hkey, key, step))
 	default:
-		base.LogPanic("can't support type")
+		base.Zap().Sugar().Panicf("can't support type")
 		return 0, fmt.Errorf("can't support type")
 	}
 }
@@ -291,7 +291,7 @@ func SetRedis(conn RedisConn, key string, valuePtr interface{}) {
 		}
 		break
 	default:
-		base.LogPanic("can't support type")
+		base.Zap().Sugar().Panicf("can't support type")
 		break
 	}
 
@@ -366,14 +366,14 @@ func GenKeyIDRedis(conn RedisConn, key string, start uint64) uint64 {
 		if error == nil {
 			return retv
 		}
-		base.LogPanic("genid (%s)Error(%s)", key, error.Error())
+		base.Zap().Sugar().Panicf("genid (%s)Error(%s)", key, error.Error())
 		return 0
 	}
 	_, err := conn.Do(getRCmd(cSET), key, start)
 	if err == nil {
 		return start
 	}
-	base.LogPanic("genid (%s)Error(%s)", key, err.Error())
+	base.Zap().Sugar().Panicf("genid (%s)Error(%s)", key, err.Error())
 	return 0
 }
 

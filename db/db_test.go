@@ -12,7 +12,7 @@ func TestRedis(t *testing.T) {
 	con := rn.GetRedis()
 	defer rn.Put(con)
 	con.Do("set", "dbtest", "oh..")
-	base.LogDebug(redis.String(con.Do("get", "dbtest")))
+	base.Zap().Sugar().Debugf(redis.String(con.Do("get", "dbtest")))
 }
 
 func TestMongo(t *testing.T) {
@@ -25,7 +25,7 @@ func TestQuery(t *testing.T) {
 	cb := NewCouchbaseConnection("localhost:8091", "default", "")
 	q := NewRedisCouchbaseQuery(rn, cb)
 	r := rn.GetRedis()
-	base.LogDebug("new id %d", q.GenID("idtest", 0))
+	base.Zap().Sugar().Debugf("new id %d", q.GenID("idtest", 0))
 	id := q.GenID("idtest", 0)
 	r.Do("del", "idtest")
 	for i := 1; i < 100; i++ {

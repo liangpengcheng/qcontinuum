@@ -125,8 +125,8 @@ func (p *Processor) send() {
 func (p *Processor) StartProcess() {
 	defer func() {
 		if err := recover(); err != nil {
-			base.LogError("%v", err)
-			base.LogError("stacks%s", debug.Stack())
+			base.Zap().Sugar().Errorf("%v", err)
+			base.Zap().Sugar().Errorf("stacks%s", debug.Stack())
 
 		}
 	}()
@@ -141,7 +141,7 @@ func (p *Processor) StartProcess() {
 			} else if p.UnHandledHandler != nil {
 				p.UnHandledHandler(msg)
 			} else {
-				base.LogWarn("can't find callback(%d)", msg.Head.ID)
+				base.Zap().Sugar().Warnf("can't find callback(%d)", msg.Head.ID)
 			}
 		case event := <-p.EventChan:
 			if event.ID == ExitEvent {

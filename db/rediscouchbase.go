@@ -43,14 +43,14 @@ func (rc *rediscouchbaseQuery) GenID(key string, start uint64) uint64 {
 		if error == nil {
 			rc.couchNode.bucket.Upsert(key, retv, 0)
 		} else {
-			base.LogPanic("genid (%s)Error", key)
+			base.Zap().Sugar().Panicf("genid (%s)Error", key)
 			return 0
 		}
 		return retv
 	}
 	counter, _, err := rc.couchNode.bucket.Counter(key, 1, int64(start), 0)
 	if err != nil {
-		base.LogPanic("GenID (%s) Error (%s) ", key, err.Error())
+		base.Zap().Sugar().Panicf("GenID (%s) Error (%s) ", key, err.Error())
 		return 0
 	}
 	conn.Do("set", key, counter)
@@ -62,7 +62,7 @@ func (rc *rediscouchbaseQuery) GetObj(key string, obj proto.Message) {
 	if b != nil {
 		err := proto.Unmarshal(b, obj)
 		if err != nil {
-			base.LogError("proto.Ummarshal error key %s,e %s", key, err.Error())
+			base.Zap().Sugar().Errorf("proto.Ummarshal error key %s,e %s", key, err.Error())
 		}
 	} else {
 		rc.couchNode.bucket.Get(key, obj)
@@ -72,7 +72,7 @@ func (rc *rediscouchbaseQuery) GetObj(key string, obj proto.Message) {
 func (rc *rediscouchbaseQuery) SetObj(key string, obj proto.Message, expiry uint32) {
 	b, err := proto.Marshal(obj)
 	if err != nil {
-		base.LogError("proto.Mashal error key %s,e %s", err.Error())
+		base.Zap().Sugar().Errorf("proto.Mashal error key %s,e %s", err.Error())
 		return
 	}
 	rc.Set(key, b, expiry)
@@ -110,7 +110,7 @@ func (rc *rediscouchbaseQuery) SetHash(hashkey string, key string, value interfa
 	go func() {
 		_, err := MapUpser(rc.couchNode.bucket, hashkey, key, value, true)
 		if err != nil {
-			base.LogPanic("set hash couchbase error %s", err.Error())
+			base.Zap().Sugar().Panicf("set hash couchbase error %s", err.Error())
 		}
 	}()
 

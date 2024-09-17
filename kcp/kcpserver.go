@@ -40,7 +40,7 @@ func NewKCPServer(host string) (*Server, error) {
 func (s *Server) BlockAccept(proc *network.Processor) {
 	for {
 		if err := s.BlockAcceptOne(proc); err != nil {
-			base.LogError("accept error :%s", err.Error())
+			base.Zap().Sugar().Errorf("accept error :%s", err.Error())
 			break
 		}
 	}

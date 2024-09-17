@@ -1,7 +1,9 @@
 package db
 
-import "gopkg.in/mgo.v2"
-import "github.com/liangpengcheng/qcontinuum/base"
+import (
+	"github.com/liangpengcheng/qcontinuum/base"
+	"gopkg.in/mgo.v2"
+)
 
 // MongoDB mongo
 type MongoDB struct {
@@ -27,7 +29,7 @@ func NewMongoDB(addr string, db string, user string, password string) *MongoDB {
 			DB:      ndb,
 		}
 	}
-	base.LogError("connect mongo error : %s", err.Error())
+	base.Zap().Sugar().Errorf("connect mongo error : %s", err.Error())
 	return nil
 }
 
@@ -38,7 +40,7 @@ func NewMongoCollection(mdb *MongoDB, collection string) *MongoDBCollection {
 			Collection: mdb.DB.C(collection),
 		}
 	}
-	base.LogError("connect db first")
+	base.Zap().Sugar().Errorf("connect db first")
 	return nil
 }
 

@@ -37,10 +37,10 @@ func ReadMessage(conn io.Reader) (*MessageHead, []byte, error) {
 	}
 	h := ReadHead(buffer)
 	if h.ID > 10000000 || h.Length < 0 || h.Length > 10240 {
-		base.LogWarn("message error: id(%d),len(%d)", h.ID, h.Length)
+		base.Zap().Sugar().Warnf("message error: id(%d),len(%d)", h.ID, h.Length)
 		return nil, nil, errors.New("message not in range")
 	}
-	//base.LogDebug("recv message : id(%d),len(%d)", h.ID, h.Length)
+	//base.Zap().Sugar().Debugf("recv message : id(%d),len(%d)", h.ID, h.Length)
 	buffer, err = ReadFromConnect(conn, int(h.Length))
 	if err != nil {
 
@@ -56,13 +56,13 @@ func (s *Server) BlockAccept(proc *Processor) {
 		for {
 			err := s.BlockAcceptOne(proc)
 			if err != nil {
-				base.LogError("accept error :%s", err.Error())
+				base.Zap().Sugar().Errorf("accept error :%s", err.Error())
 				break
 			}
 		}
 
 	} else {
-		base.LogError("create listener first")
+		base.Zap().Sugar().Errorf("create listener first")
 	}
 }
 
@@ -71,7 +71,7 @@ func (s *Server) BlockAcceptOne(proc *Processor) error {
 	if s.Listener != nil {
 		conn, err := s.Listener.Accept()
 		if err == nil {
-			base.LogDebug("incomming connection :%s", conn.RemoteAddr().String())
+			base.Zap().Sugar().Debugf("incomming connection :%s", conn.RemoteAddr().String())
 			peer := &ClientPeer{
 				Connection:   conn,
 				redirectProc: make(chan *Processor, 1),

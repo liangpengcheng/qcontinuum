@@ -11,7 +11,7 @@ import (
 	"github.com/liangpengcheng/qcontinuum/base"
 )
 
-//ClientPeer client connection peer
+// ClientPeer client connection peer
 type ClientPeer struct {
 	Connection   net.Conn
 	Flag         int32
@@ -26,7 +26,7 @@ func (c *ClientPeer) CheckAfter(t time.Duration) {
 			if c.Proc != nil {
 				if c.ID == 0 {
 					c.Proc.FuncChan <- func() {
-						base.LogWarn("auth timeout %v", c.Connection)
+						base.Zap().Sugar().Warnf("auth timeout %v", c.Connection)
 						c.Connection.Close()
 					}
 				}
@@ -58,7 +58,7 @@ func NewTcpConnection(address string, proc *Processor) (client *ClientPeer, err 
 func (peer *ClientPeer) Redirect(proc *Processor) {
 	for len(peer.redirectProc) > 0 {
 		<-peer.redirectProc
-		base.LogWarn("重设处理器队列不为0，请检查逻辑")
+		base.Zap().Sugar().Warnf("重设处理器队列不为0，请检查逻辑")
 	}
 	peer.redirectProc <- proc
 }
@@ -84,12 +84,12 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 		//peer.Connection.Send()
 		n, err := peer.Connection.Write(allbuf)
 		if err != nil {
-			base.LogWarn("send error:%s,%d", err.Error(), n)
+			base.Zap().Sugar().Warnf("send error:%s,%d", err.Error(), n)
 		} else {
-			//base.LogDebug("send success id:%d,len:%d", msgid, n)
+			//base.Zap().Sugar().Debugf("send success id:%d,len:%d", msgid, n)
 		}
 	} else {
-		base.LogWarn("msg:%d unmarshal error :%s", msgid, err.Error())
+		base.Zap().Sugar().Warnf("msg:%d unmarshal error :%s", msgid, err.Error())
 	}
 	return err
 }
@@ -98,9 +98,9 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 func (peer *ClientPeer) SendMessageBuffer(msg []byte) {
 	n, err := peer.Connection.Write(msg)
 	if err != nil {
-		base.LogWarn("send error:%s,%d", err.Error(), n)
+		base.Zap().Sugar().Warnf("send error:%s,%d", err.Error(), n)
 	} else {
-		//base.LogDebug("send success len:%d", n)
+		//base.Zap().Sugar().Debugf("send success len:%d", n)
 	}
 }
 
@@ -119,9 +119,9 @@ func (peer *ClientPeer) TransmitMsg(msg *Message) {
 	*/
 	n, err := peer.Connection.Write(allbuf)
 	if err != nil {
-		base.LogWarn("send error:%s,%d", err.Error(), n)
+		base.Zap().Sugar().Warnf("send error:%s,%d", err.Error(), n)
 	} else {
-		//base.LogDebug("send success len:%d", n)
+		//base.Zap().Sugar().Debugf("send success len:%d", n)
 	}
 
 }
@@ -130,11 +130,11 @@ func (peer *ClientPeer) TransmitMsg(msg *Message) {
 func (peer *ClientPeer) ConnectionHandler() {
 	defer func() {
 		if err := recover(); err != nil {
-			base.LogError("%v", err)
+			base.Zap().Sugar().Errorf("%v", err)
 		}
 	}()
 	if peer.Connection == nil {
-		base.LogError("connection is nil")
+		base.Zap().Sugar().Errorf("connection is nil")
 	}
 
 	for {
@@ -180,11 +180,11 @@ func (peer *ClientPeer) ConnectionHandler() {
 func (peer *ClientPeer) ConnectionHandlerWithPreFunc(f func()) {
 	defer func() {
 		if err := recover(); err != nil {
-			base.LogError("%v", err)
+			base.Zap().Sugar().Errorf("%v", err)
 		}
 	}()
 	if peer.Connection == nil {
-		base.LogError("connection is nil")
+		base.Zap().Sugar().Errorf("connection is nil")
 	}
 
 	for {

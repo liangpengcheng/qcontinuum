@@ -19,6 +19,7 @@ var upgrader = websocket.FastHTTPUpgrader{
 		return true
 	},
 }
+
 type WebSocketPeer struct {
 	Connection *websocket.Conn
 }
@@ -64,13 +65,13 @@ func (ws *WebSocketPeer) SetWriteDeadline(t time.Time) error {
 }
 
 func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
-	
+
 	notfound := r.NotFound
 	r.NotFound = func(ctx *fasthttp.RequestCtx) {
 		if base.String(ctx.Path()) == path {
 			defer func() {
 				if err := recover(); err != nil {
-					base.LogError("%v", err)
+					base.Zap().Sugar().Errorf("%v", err)
 				}
 			}()
 			err := upgrader.Upgrade(ctx, func(ws *websocket.Conn) {
@@ -98,7 +99,7 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 					mt, content, err := ws.ReadMessage()
 					if err != nil {
 
-						//base.LogError("read websocket message error %v", err)
+						//base.Zap().Sugar().Errorf("read websocket message error %v", err)
 						return
 					}
 					hb := content[:8]
@@ -106,7 +107,7 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 					if mt == websocket.BinaryMessage {
 						h := network.ReadHead(hb)
 						if h.ID > 10000000 || h.Length < 0 || h.Length > 10240 {
-							base.LogWarn("message error: id(%d),len(%d)", h.ID, h.Length)
+							base.Zap().Sugar().Warnf("message error: id(%d),len(%d)", h.ID, h.Length)
 							continue
 						}
 						msg := &network.Message{
@@ -125,7 +126,7 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 						}
 
 					} else {
-						base.LogWarn("unsupport message type")
+						base.Zap().Sugar().Warnf("unsupport message type")
 					}
 				}
 				//peer.ConnectionHandler()

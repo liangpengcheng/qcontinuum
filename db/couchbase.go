@@ -22,9 +22,9 @@ func NewCouchbaseConnection(server string, bucketName string, pwd string) *Couch
 			base.LogInfo("coubase started")
 			return couchbase
 		}
-		base.LogError("open bucket error :%s", err.Error())
+		base.Zap().Sugar().Errorf("open bucket error :%s", err.Error())
 	} else {
-		base.LogError("connect couchbase error :%s", error.Error())
+		base.Zap().Sugar().Errorf("connect couchbase error :%s", error.Error())
 	}
 	return nil
 }
