@@ -106,7 +106,7 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 					body := content[8:]
 					if mt == websocket.BinaryMessage {
 						h := network.ReadHead(hb)
-						if h.ID > 10000000 || h.Length < 0 || h.Length > 10240 {
+						if h.ID > 10000000 || h.Length < 0 || h.Length > 1024*1024*10 {
 							base.Zap().Sugar().Warnf("message error: id(%d),len(%d)", h.ID, h.Length)
 							continue
 						}
