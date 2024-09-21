@@ -131,7 +131,7 @@ func (p *Processor) StartProcess() {
 		}
 	}()
 	//go p.send()
-	base.LogInfo("processor is starting ")
+	base.Zap().Sugar().Infof("processor is starting ")
 	tick := time.Tick(p.loopTime)
 	for {
 		select {
@@ -145,7 +145,7 @@ func (p *Processor) StartProcess() {
 			}
 		case event := <-p.EventChan:
 			if event.ID == ExitEvent {
-				base.LogInfo("Processor exit : %s", event.Param)
+				base.Zap().Sugar().Infof("Processor exit : %s", event.Param)
 				return
 			}
 			if cb, ok := p.EventCallback[event.ID]; ok {

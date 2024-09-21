@@ -73,7 +73,7 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 			return
 		}
 		defer ws.Close()
-		base.LogInfo("new webclient connected :%s", ws.RemoteAddr().String())
+		base.Zap().Sugar().Infof("new webclient connected :%s", ws.RemoteAddr().String())
 		wsConnection := &WebSocketPeer{
 			Connection: ws,
 		}

@@ -44,13 +44,13 @@ func (s *Server) BlockAccept(proc *network.Processor) {
 			break
 		}
 	}
-	base.LogInfo("exit accept")
+	base.Zap().Sugar().Infof("exit accept")
 }
 
 // BlockAcceptOne 接受一个连接
 func (s *Server) BlockAcceptOne(proc *network.Processor) error {
 	if conn, err := s.Listener.AcceptKCP(); err == nil {
-		base.LogInfo("remote address:%s", conn.RemoteAddr().String())
+		base.Zap().Sugar().Infof("remote address:%s", conn.RemoteAddr().String())
 		setupKcp(conn)
 		peer := &network.ClientPeer{
 			Connection:   conn,

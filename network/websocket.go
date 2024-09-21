@@ -55,7 +55,7 @@ type WebSocketServer struct {
 func NewWebSocket(path string, proc *Processor) {
 	http.Handle(path, websocket.Handler(
 		func(ws *websocket.Conn) {
-			base.LogInfo("new webclient connected :%s", ws.RemoteAddr().String())
+			base.Zap().Sugar().Infof("new webclient connected :%s", ws.RemoteAddr().String())
 			peer := &ClientPeer{
 				Connection: &WebSocketPeer{
 					Connection: ws,

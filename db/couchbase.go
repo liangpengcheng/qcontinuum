@@ -19,7 +19,7 @@ func NewCouchbaseConnection(server string, bucketName string, pwd string) *Couch
 			couchbase := &CouchbaseCluster{
 				bucket: bk,
 			}
-			base.LogInfo("coubase started")
+			base.Zap().Sugar().Infof("coubase started")
 			return couchbase
 		}
 		base.Zap().Sugar().Errorf("open bucket error :%s", err.Error())

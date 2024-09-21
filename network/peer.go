@@ -147,7 +147,7 @@ func (peer *ClientPeer) ConnectionHandler() {
 
 		}
 		if err != nil {
-			//base.LogInfo("socket read error %s,%s", peer.Connection.RemoteAddr().String(), err.Error())
+			//base.Zap().Sugar().Infof("socket read error %s,%s", peer.Connection.RemoteAddr().String(), err.Error())
 			//peer.Connection.Close()
 			//peer.Connection = nil
 			break
@@ -173,7 +173,7 @@ func (peer *ClientPeer) ConnectionHandler() {
 		Peer: peer,
 	}
 	peer.Proc.EventChan <- event
-	base.LogInfo("lost connection %s", peer.Connection.RemoteAddr().String())
+	base.Zap().Sugar().Infof("lost connection %s", peer.Connection.RemoteAddr().String())
 }
 
 // ConnectionHandler read messages here
@@ -198,7 +198,7 @@ func (peer *ClientPeer) ConnectionHandlerWithPreFunc(f func()) {
 
 		}
 		if err != nil {
-			//base.LogInfo("socket read error %s,%s", peer.Connection.RemoteAddr().String(), err.Error())
+			//base.Zap().Sugar().Infof("socket read error %s,%s", peer.Connection.RemoteAddr().String(), err.Error())
 			//peer.Connection.Close()
 			//peer.Connection = nil
 			break
@@ -224,5 +224,5 @@ func (peer *ClientPeer) ConnectionHandlerWithPreFunc(f func()) {
 		Peer: peer,
 	}
 	peer.Proc.EventChan <- event
-	base.LogInfo("lost connection %s", peer.Connection.RemoteAddr().String())
+	base.Zap().Sugar().Infof("lost connection %s", peer.Connection.RemoteAddr().String())
 }
