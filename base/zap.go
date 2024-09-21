@@ -2,8 +2,9 @@ package base
 
 import (
 	"flag"
-	"os"
+	"time"
 
+	"github.com/natefinch/lumberjack"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -13,14 +14,20 @@ var zp *zap.Logger
 func Zap() *zap.Logger {
 	return zp
 }
-func init() {
-
-	logPath := flag.String("logpath", "", "log file path")
+func init_zap() {
+	// 日志目录路径通过命令行参数传递
+	logDir := flag.String("logpath", "", "log directory path")
 	flag.Parse()
-	if logPath != nil && *logPath != "" {
-		// 创建文件写入器
-		file, _ := os.Create(*logPath)
-		writeSyncer := zapcore.AddSync(file)
+
+	if logDir != nil && *logDir != "" {
+		// 使用 lumberjack 进行日志轮转
+		writeSyncer := zapcore.AddSync(&lumberjack.Logger{
+			Filename:   *logDir + "/log-" + time.Now().Format("2006-01-02") + ".log", // 按日期命名日志文件
+			MaxSize:    10,                                                           // 每个日志文件最大 10 MB
+			MaxBackups: 30,                                                           // 保留 30 个备份
+			MaxAge:     7,                                                            // 保留 7 天的日志文件
+			Compress:   false,                                                        // 不压缩旧日志
+		})
 
 		// 配置日志编码器
 		encoderConfig := zap.NewProductionEncoderConfig()
@@ -39,6 +46,9 @@ func init() {
 	} else {
 		zp, _ = zap.NewProduction()
 	}
+}
+func init() {
+	init_zap()
 
 	//
 

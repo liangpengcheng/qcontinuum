@@ -9,6 +9,7 @@ replace (
 )
 
 require (
+	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/fasthttp/router v0.5.0
 	github.com/fasthttp/websocket v1.4.0
 	github.com/garyburd/redigo v1.6.0
@@ -18,6 +19,7 @@ require (
 	github.com/google/uuid v1.1.1 // indirect
 	github.com/gorilla/websocket v1.4.2
 	github.com/klauspost/reedsolomon v1.9.2 // indirect
+	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
@@ -34,5 +36,6 @@ require (
 	gopkg.in/couchbaselabs/gojcbmock.v1 v1.0.3 // indirect
 	gopkg.in/couchbaselabs/jsonx.v1 v1.0.0 // indirect
 	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
+	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.2.8 // indirect
 )

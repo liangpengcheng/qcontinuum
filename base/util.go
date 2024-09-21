@@ -134,14 +134,16 @@ func OnExit(onexit func()) {
 
 func RandomString(l int) string {
 	var result bytes.Buffer
-	var temp string
-	for i := 0; i < l; {
-		if string(RandInt(65, 90)) != temp {
-			temp = string(RandInt(65, 90))
-			result.WriteString(temp)
-			i++
-		}
+
+	// 设置随机种子
+	rand.Seed(time.Now().UnixNano())
+
+	for i := 0; i < l; i++ {
+		// 生成65到90范围的随机整数，并转换为字符 (A-Z)
+		randomChar := rune(rand.Intn(26) + 65)
+		result.WriteRune(randomChar)
 	}
+
 	return result.String()
 }
 func RandInt(min int, max int) int {
