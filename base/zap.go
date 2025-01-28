@@ -20,29 +20,61 @@ func init_zap() {
 	flag.Parse()
 
 	if logDir != nil && *logDir != "" {
-		// 使用 lumberjack 进行日志轮转
-		writeSyncer := zapcore.AddSync(&lumberjack.Logger{
-			Filename:   *logDir + "/log-" + time.Now().Format("2006-01-02") + ".log", // 按日期命名日志文件
-			MaxSize:    10,                                                           // 每个日志文件最大 10 MB
-			MaxBackups: 30,                                                           // 保留 30 个备份
-			MaxAge:     7,                                                            // 保留 7 天的日志文件
-			Compress:   false,                                                        // 不压缩旧日志
-		})
-
 		// 配置日志编码器
 		encoderConfig := zap.NewProductionEncoderConfig()
 		encoderConfig.TimeKey = "time"
 		encoderConfig.EncodeTime = zapcore.ISO8601TimeEncoder
 
+		// 创建初始日志文件
+		currentDate := time.Now().Format("2006-01-02")
+		filename := *logDir + "/log-" + currentDate + ".log"
+		writeSyncer := zapcore.AddSync(&lumberjack.Logger{
+			Filename:   filename,
+			MaxSize:    500,   // 每个日志文件最大 500 MB
+			MaxBackups: 30,    // 保留 30 个备份
+			MaxAge:     7,     // 保留 7 天的日志文件
+			Compress:   false, // 不压缩旧日志
+		})
+
 		// 设置日志级别和输出目标
 		core := zapcore.NewCore(
-			zapcore.NewJSONEncoder(encoderConfig), // 使用 JSON 编码器
-			writeSyncer,                           // 输出到指定文件
-			zap.InfoLevel,                         // 日志级别
+			zapcore.NewJSONEncoder(encoderConfig),
+			writeSyncer,
+			zap.InfoLevel,
 		)
 
 		zp = zap.New(core)
-		defer zp.Sync()
+
+		// 每天凌晨创建新的日志文件
+		go func() {
+			for {
+				now := time.Now()
+				next := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+				timer := time.NewTimer(next.Sub(now))
+				<-timer.C
+
+				// 创建新的日志文件
+				currentDate = time.Now().Format("2006-01-02")
+				filename = *logDir + "/log-" + currentDate + ".log"
+
+				writeSyncer := zapcore.AddSync(&lumberjack.Logger{
+					Filename:   filename,
+					MaxSize:    500,
+					MaxBackups: 30,
+					MaxAge:     7,
+					Compress:   false,
+				})
+
+				core := zapcore.NewCore(
+					zapcore.NewJSONEncoder(encoderConfig),
+					writeSyncer,
+					zap.InfoLevel,
+				)
+
+				zp = zap.New(core)
+			}
+		}()
+
 	} else {
 		zp, _ = zap.NewProduction()
 	}
