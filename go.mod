@@ -13,15 +13,17 @@ require (
 	github.com/fasthttp/router v0.5.0
 	github.com/fasthttp/websocket v1.4.0
 	github.com/garyburd/redigo v1.6.0
-	github.com/gin-gonic/gin v1.9.0
+	github.com/gin-gonic/gin v1.9.1
 	github.com/golang/protobuf v1.5.0
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/google/uuid v1.1.1 // indirect
 	github.com/gorilla/websocket v1.4.2
 	github.com/klauspost/reedsolomon v1.9.2 // indirect
+	github.com/kr/pretty v0.3.0 // indirect
 	github.com/natefinch/lumberjack v2.0.0+incompatible
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
+	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
 	github.com/templexxx/xor v0.0.0-20181023030647-4e92f724b73b // indirect
 	github.com/tjfoc/gmsm v1.0.1 // indirect
@@ -29,7 +31,8 @@ require (
 	github.com/xtaci/kcp-go v5.4.4+incompatible
 	github.com/xtaci/lossyconn v0.0.0-20190602105132-8df528c0c9ae // indirect
 	go.uber.org/zap v1.27.0
-	golang.org/x/net v0.7.0
+	golang.org/x/net v0.10.0
+	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/couchbase/gocb.v1 v1.6.2
 	gopkg.in/couchbase/gocbcore.v7 v7.1.13 // indirect
 	gopkg.in/couchbaselabs/gocbconnstr.v1 v1.0.3 // indirect
