@@ -131,6 +131,13 @@ func (peer *ClientPeer) ConnectionHandler() {
 	defer func() {
 		if err := recover(); err != nil {
 			base.Zap().Sugar().Errorf("%v", err)
+			// 添加与 ConnectionHandlerWithPreFunc 相同的 panic 处理
+			event := &Event{
+				ID:   RemoveEvent,
+				Peer: peer,
+			}
+			peer.Proc.EventChan <- event
+			base.Zap().Sugar().Infof("lost connection (panic) %s", peer.Connection.RemoteAddr().String())
 		}
 	}()
 	if peer.Connection == nil {
@@ -181,6 +188,13 @@ func (peer *ClientPeer) ConnectionHandlerWithPreFunc(f func()) {
 	defer func() {
 		if err := recover(); err != nil {
 			base.Zap().Sugar().Errorf("%v", err)
+			// 在 panic recover 时也发送 RemoveEvent
+			event := &Event{
+				ID:   RemoveEvent,
+				Peer: peer,
+			}
+			peer.Proc.EventChan <- event
+			base.Zap().Sugar().Infof("lost connection (panic) %s", peer.Connection.RemoteAddr().String())
 		}
 	}()
 	if peer.Connection == nil {
