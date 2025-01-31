@@ -129,19 +129,17 @@ func (peer *ClientPeer) TransmitMsg(msg *Message) {
 // ConnectionHandler read messages here
 func (peer *ClientPeer) ConnectionHandler() {
 	defer func() {
-		if err := recover(); err != nil {
-			base.Zap().Sugar().Errorf("%v", err)
-			// 添加与 ConnectionHandlerWithPreFunc 相同的 panic 处理
-			event := &Event{
-				ID:   RemoveEvent,
-				Peer: peer,
+		if r := recover(); r != nil {
+			if _, ok := r.(net.Error); ok {
+				base.Zap().Sugar().Infof("Connection closed")
+			} else {
+				base.Zap().Sugar().Errorf("Unexpected error in connection handler: %v", r)
 			}
-			peer.Proc.EventChan <- event
-			base.Zap().Sugar().Infof("lost connection (panic) %s", peer.Connection.RemoteAddr().String())
 		}
 	}()
 	if peer.Connection == nil {
-		base.Zap().Sugar().Errorf("connection is nil")
+		base.Zap().Sugar().Error("connection is nil")
+		return
 	}
 
 	for {
@@ -186,19 +184,17 @@ func (peer *ClientPeer) ConnectionHandler() {
 // ConnectionHandler read messages here
 func (peer *ClientPeer) ConnectionHandlerWithPreFunc(f func()) {
 	defer func() {
-		if err := recover(); err != nil {
-			base.Zap().Sugar().Errorf("%v", err)
-			// 在 panic recover 时也发送 RemoveEvent
-			event := &Event{
-				ID:   RemoveEvent,
-				Peer: peer,
+		if r := recover(); r != nil {
+			if _, ok := r.(net.Error); ok {
+				base.Zap().Sugar().Infof("Connection closed")
+			} else {
+				base.Zap().Sugar().Errorf("Unexpected error in connection handler: %v", r)
 			}
-			peer.Proc.EventChan <- event
-			base.Zap().Sugar().Infof("lost connection (panic) %s", peer.Connection.RemoteAddr().String())
 		}
 	}()
 	if peer.Connection == nil {
-		base.Zap().Sugar().Errorf("connection is nil")
+		base.Zap().Sugar().Error("connection is nil")
+		return
 	}
 
 	for {
