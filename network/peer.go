@@ -3,6 +3,7 @@ package network
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"time"
 
 	"net"
@@ -65,7 +66,9 @@ func (peer *ClientPeer) Redirect(proc *Processor) {
 
 // SendMessage send a message to peer
 func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
-
+	if peer.Connection == nil {
+		return errors.New("connection is nil")
+	}
 	length := int32(proto.Size(msg))
 	bufhead := bytes.NewBuffer([]byte{})
 	//buf := Base.BufferPoolGet()
@@ -96,6 +99,9 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 
 // SendMessageBuffer 发送缓冲区
 func (peer *ClientPeer) SendMessageBuffer(msg []byte) error {
+	if peer.Connection == nil {
+		return errors.New("connection is nil")
+	}
 	peer.Connection.SetWriteDeadline(time.Now().Add(time.Second * 10))
 	n, err := peer.Connection.Write(msg)
 	if err != nil {
@@ -108,7 +114,9 @@ func (peer *ClientPeer) SendMessageBuffer(msg []byte) error {
 
 // TransmitMsg 转发消息
 func (peer *ClientPeer) TransmitMsg(msg *Message) error {
-
+	if peer.Connection == nil {
+		return errors.New("connection is nil")
+	}
 	bufhead := bytes.NewBuffer([]byte{})
 	binary.Write(bufhead, binary.LittleEndian, msg.Head.Length)
 	binary.Write(bufhead, binary.LittleEndian, msg.Head.ID)
