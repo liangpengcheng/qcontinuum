@@ -82,11 +82,10 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 			}
 		*/
 		//peer.Connection.Send()
-		n, err := peer.Connection.Write(allbuf)
-		if err != nil {
-			base.Zap().Sugar().Warnf("send error:%s,%d", err.Error(), n)
-		} else {
-			//base.Zap().Sugar().Debugf("send success id:%d,len:%d", msgid, n)
+		n, writeErr := peer.Connection.Write(allbuf)
+		if writeErr != nil {
+			base.Zap().Sugar().Warnf("send error:%s,%d", writeErr.Error(), n)
+			return writeErr
 		}
 	} else {
 		base.Zap().Sugar().Warnf("msg:%d unmarshal error :%s", msgid, err.Error())
@@ -95,17 +94,18 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 }
 
 // SendMessageBuffer 发送缓冲区
-func (peer *ClientPeer) SendMessageBuffer(msg []byte) {
+func (peer *ClientPeer) SendMessageBuffer(msg []byte) error {
 	n, err := peer.Connection.Write(msg)
 	if err != nil {
 		base.Zap().Sugar().Warnf("send error:%s,%d", err.Error(), n)
 	} else {
 		//base.Zap().Sugar().Debugf("send success len:%d", n)
 	}
+	return err
 }
 
 // TransmitMsg 转发消息
-func (peer *ClientPeer) TransmitMsg(msg *Message) {
+func (peer *ClientPeer) TransmitMsg(msg *Message) error {
 
 	bufhead := bytes.NewBuffer([]byte{})
 	binary.Write(bufhead, binary.LittleEndian, msg.Head.Length)
@@ -120,10 +120,8 @@ func (peer *ClientPeer) TransmitMsg(msg *Message) {
 	n, err := peer.Connection.Write(allbuf)
 	if err != nil {
 		base.Zap().Sugar().Warnf("send error:%s,%d", err.Error(), n)
-	} else {
-		//base.Zap().Sugar().Debugf("send success len:%d", n)
 	}
-
+	return err
 }
 
 // ConnectionHandler read messages here
