@@ -38,6 +38,7 @@ func (c *ClientPeer) CheckAfter(t time.Duration) {
 func (c *ClientPeer) Close() {
 	if c.Connection != nil {
 		c.Connection.Close()
+		c.Connection = nil
 	}
 }
 
