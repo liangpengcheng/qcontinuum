@@ -82,6 +82,7 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 			}
 		*/
 		//peer.Connection.Send()
+		peer.Connection.SetWriteDeadline(time.Now().Add(time.Second * 10))
 		n, writeErr := peer.Connection.Write(allbuf)
 		if writeErr != nil {
 			base.Zap().Sugar().Warnf("send error:%s,%d", writeErr.Error(), n)
@@ -95,6 +96,7 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 
 // SendMessageBuffer 发送缓冲区
 func (peer *ClientPeer) SendMessageBuffer(msg []byte) error {
+	peer.Connection.SetWriteDeadline(time.Now().Add(time.Second * 10))
 	n, err := peer.Connection.Write(msg)
 	if err != nil {
 		base.Zap().Sugar().Warnf("send error:%s,%d", err.Error(), n)
@@ -117,6 +119,7 @@ func (peer *ClientPeer) TransmitMsg(msg *Message) error {
 			Body: allbuf,
 		}
 	*/
+	peer.Connection.SetWriteDeadline(time.Now().Add(time.Second * 10))
 	n, err := peer.Connection.Write(allbuf)
 	if err != nil {
 		base.Zap().Sugar().Warnf("send error:%s,%d", err.Error(), n)
