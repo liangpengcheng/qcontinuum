@@ -202,7 +202,7 @@ func (peer *ClientPeer) ConnectionHandler() {
 }
 
 // ConnectionHandler read messages here
-func (peer *ClientPeer) ConnectionHandlerWithPreFunc(f func()) {
+func (peer *ClientPeer) ConnectionHandlerWithPreFunc(f func() bool) {
 	defer func() {
 		if r := recover(); r != nil {
 			if _, ok := r.(net.Error); ok {
@@ -218,7 +218,9 @@ func (peer *ClientPeer) ConnectionHandlerWithPreFunc(f func()) {
 	}
 
 	for {
-		f()
+		if !f() {
+			break
+		}
 		h, buffer, err := ReadMessage(peer.Connection)
 		if len(buffer) == 0 {
 			continue

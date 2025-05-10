@@ -93,12 +93,13 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 			proc.EventChan <- leaveEvent
 		}()
 		proc.EventChan <- event
-		peer.ConnectionHandlerWithPreFunc(func() {
+		peer.ConnectionHandlerWithPreFunc(func() bool {
 			_, wsConnection.IOReader, err = ws.NextReader()
 			if err != nil {
 				base.Zap().Sugar().Errorf("websocket read error: %v", err)
-				return
+				return false
 			}
+			return true
 		})
 	})
 }
