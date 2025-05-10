@@ -87,10 +87,15 @@ func (peer *ClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 		*/
 		//peer.Connection.Send()
 		peer.Connection.SetWriteDeadline(time.Now().Add(time.Second * 10))
-		n, writeErr := peer.Connection.Write(allbuf)
-		if writeErr != nil {
-			base.Zap().Sugar().Warnf("send error:%s,%d", writeErr.Error(), n)
-			return writeErr
+		totalWritten := 0
+		for totalWritten < len(allbuf) {
+			n, writeErr := peer.Connection.Write(allbuf[totalWritten:])
+			if writeErr != nil {
+				base.Zap().Sugar().Warnf("send error:%s,%d", writeErr.Error(), n)
+				peer.Close()
+				return writeErr
+			}
+			totalWritten += n
 		}
 	} else {
 		base.Zap().Sugar().Warnf("msg:%d unmarshal error :%s", msgid, err.Error())
@@ -104,13 +109,17 @@ func (peer *ClientPeer) SendMessageBuffer(msg []byte) error {
 		return errors.New("connection is nil")
 	}
 	peer.Connection.SetWriteDeadline(time.Now().Add(time.Second * 10))
-	n, err := peer.Connection.Write(msg)
-	if err != nil {
-		base.Zap().Sugar().Warnf("send error:%s,%d", err.Error(), n)
-	} else {
-		//base.Zap().Sugar().Debugf("send success len:%d", n)
+	totalWritten := 0
+	for totalWritten < len(msg) {
+		n, err := peer.Connection.Write(msg[totalWritten:])
+		if err != nil {
+			base.Zap().Sugar().Warnf("send error:%s,%d", err.Error(), n)
+			peer.Close()
+			return err
+		}
+		totalWritten += n
 	}
-	return err
+	return nil
 }
 
 // TransmitMsg 转发消息
@@ -122,18 +131,19 @@ func (peer *ClientPeer) TransmitMsg(msg *Message) error {
 	binary.Write(bufhead, binary.LittleEndian, msg.Head.Length)
 	binary.Write(bufhead, binary.LittleEndian, msg.Head.ID)
 	allbuf := base.BytesCombine(bufhead.Bytes(), msg.Body)
-	/*
-		peer.Proc.SendChan <- &Message{
-			Peer: peer,
-			Body: allbuf,
-		}
-	*/
+
 	peer.Connection.SetWriteDeadline(time.Now().Add(time.Second * 10))
-	n, err := peer.Connection.Write(allbuf)
-	if err != nil {
-		base.Zap().Sugar().Warnf("send error:%s,%d", err.Error(), n)
+	totalWritten := 0
+	for totalWritten < len(allbuf) {
+		n, err := peer.Connection.Write(allbuf[totalWritten:])
+		if err != nil {
+			base.Zap().Sugar().Warnf("send error:%s,%d", err.Error(), n)
+			peer.Close()
+			return err
+		}
+		totalWritten += n
 	}
-	return err
+	return nil
 }
 
 // ConnectionHandler read messages here
