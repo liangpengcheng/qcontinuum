@@ -36,7 +36,7 @@ func ReadMessage(conn io.Reader) (*MessageHead, []byte, error) {
 		return nil, nil, err
 	}
 	h := ReadHead(buffer)
-	if h.ID > 10000000 || h.Length < 0 || h.Length > 1024*1024 {
+	if h.ID > 10000000 || h.Length < 0 || h.Length > 1024*1024*100 {
 		base.Zap().Sugar().Warnf("message error: id(%d),len(%d)", h.ID, h.Length)
 		return nil, nil, errors.New("message not in range")
 	}
