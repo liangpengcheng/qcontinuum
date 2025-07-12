@@ -81,19 +81,8 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 				// 创建WebSocket连接包装器
 				wsConn := &WebSocketPeer{Connection: ws}
 
-				// 为WebSocket创建简化的peer（不使用异步I/O）
-				peer := &network.ClientPeer{
-					AsyncClientPeer: &network.AsyncClientPeer{
-						Connection: wsConn,
-						ID:         0,
-						Proc:       proc,
-						fd:         -1,
-						state:      int32(network.PeerStateConnected),
-						lastActive: time.Now().Unix(),
-						reader:     network.NewAsyncMessageReader(),
-						writer:     network.NewZeroCopyMessageWriter(),
-					},
-				}
+				// 为WebSocket创建专用的peer
+				peer := network.NewWebSocketClientPeer(wsConn, proc)
 
 				event := &network.Event{
 					ID:   network.AddEvent,

@@ -60,19 +60,8 @@ func NewWebSocket(path string, proc *Processor) {
 			// 创建WebSocket连接的包装器
 			wsPeer := &WebSocketPeer{Connection: ws}
 			
-			// 为WebSocket创建简化的peer（不使用异步I/O）
-			peer := &ClientPeer{
-				AsyncClientPeer: &AsyncClientPeer{
-					Connection: wsPeer,
-					fd:         -1,
-					Proc:       proc,
-					ID:         0,
-					state:      int32(PeerStateConnected),
-					lastActive: time.Now().Unix(),
-					reader:     NewAsyncMessageReader(),
-					writer:     NewZeroCopyMessageWriter(),
-				},
-			}
+			// 为WebSocket创建专用的peer
+			peer := NewWebSocketClientPeer(wsPeer, proc)
 			
 			event := &Event{
 				ID:   AddEvent,

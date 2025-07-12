@@ -41,6 +41,23 @@ type AsyncClientPeer struct {
 	lastActive   int64 // unix timestamp
 }
 
+// NewWebSocketClientPeer 创建WebSocket客户端peer（无文件描述符）
+func NewWebSocketClientPeer(conn net.Conn, proc *Processor) *ClientPeer {
+	peer := &AsyncClientPeer{
+		Connection: conn,
+		fd:         -1, // WebSocket使用虚拟fd
+		Proc:       proc,
+		ID:         0,
+		state:      int32(PeerStateConnected),
+		lastActive: time.Now().Unix(),
+		reader:     NewAsyncMessageReader(),
+		writer:     NewZeroCopyMessageWriter(),
+		reactor:    nil, // WebSocket不使用reactor
+	}
+	
+	return &ClientPeer{AsyncClientPeer: peer}
+}
+
 // NewAsyncClientPeer 创建异步客户端peer
 func NewAsyncClientPeer(conn net.Conn, proc *Processor, reactor *EpollReactor) (*AsyncClientPeer, error) {
 	// 获取文件描述符

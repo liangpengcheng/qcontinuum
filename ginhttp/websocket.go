@@ -78,19 +78,8 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 			Connection: ws,
 		}
 
-		// 为WebSocket创建简化的peer（不使用异步I/O）
-		peer := &network.ClientPeer{
-			AsyncClientPeer: &network.AsyncClientPeer{
-				Connection: wsConnection,
-				ID:         0,
-				Proc:       proc,
-				fd:         -1,
-				state:      int32(network.PeerStateConnected),
-				lastActive: time.Now().Unix(),
-				reader:     network.NewAsyncMessageReader(),
-				writer:     network.NewZeroCopyMessageWriter(),
-			},
-		}
+		// 为WebSocket创建专用的peer
+		peer := network.NewWebSocketClientPeer(wsConnection, proc)
 
 		event := &network.Event{
 			ID:   network.AddEvent,
