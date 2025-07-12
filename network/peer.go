@@ -155,6 +155,40 @@ func (peer *AsyncClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 		return errors.New("connection is not connected")
 	}
 	
+	// 检查是否为WebSocket连接（fd = -1表示虚拟连接）
+	if peer.fd == -1 {
+		// 对于WebSocket连接，直接序列化并发送
+		data, err := proto.Marshal(msg)
+		if err != nil {
+			return err
+		}
+		
+		// 创建带头部的完整消息
+		buffer := getBuffer()
+		defer buffer.Release()
+		
+		totalLen := len(data) + 8
+		if buffer.cap < totalLen {
+			buffer.Grow(totalLen)
+		}
+		
+		// 写入头部
+		head := MessageHead{
+			Length: int32(len(data)),
+			ID:     msgid,
+		}
+		WriteHeadToBuffer(buffer, head)
+		
+		// 写入消息体
+		copy(buffer.data[8:], data)
+		buffer.len = totalLen
+		
+		// 直接通过连接发送
+		_, err = peer.Connection.Write(buffer.data[:totalLen])
+		return err
+	}
+	
+	// 对于真实的TCP/UDP连接，使用异步写入器
 	return peer.writer.WriteMessage(peer.fd, msg, msgid)
 }
 
@@ -164,6 +198,14 @@ func (peer *AsyncClientPeer) SendMessageBuffer(data []byte) error {
 		return errors.New("connection is not connected")
 	}
 	
+	// 检查是否为WebSocket连接（fd = -1表示虚拟连接）
+	if peer.fd == -1 {
+		// 对于WebSocket连接，直接发送
+		_, err := peer.Connection.Write(data)
+		return err
+	}
+	
+	// 对于真实的TCP/UDP连接，使用异步写入器
 	// 创建写入请求
 	buffer := getBuffer()
 	if buffer.cap < len(data) {
@@ -208,6 +250,15 @@ func (peer *AsyncClientPeer) TransmitMsg(msg *Message) error {
 	copy(buffer.data[8:], msg.Body)
 	buffer.len = totalLen
 	
+	// 检查是否为WebSocket连接（fd = -1表示虚拟连接）
+	if peer.fd == -1 {
+		// 对于WebSocket连接，直接发送
+		_, err := peer.Connection.Write(buffer.data[:totalLen])
+		buffer.Release()
+		return err
+	}
+	
+	// 对于真实的TCP/UDP连接，使用异步写入器
 	// 创建写入请求
 	writeReq := &writeRequest{
 		fd:     peer.fd,

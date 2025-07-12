@@ -69,6 +69,8 @@ func NewWebSocket(path string, proc *Processor) {
 					ID:         0,
 					state:      int32(PeerStateConnected),
 					lastActive: time.Now().Unix(),
+					reader:     NewAsyncMessageReader(),
+					writer:     NewZeroCopyMessageWriter(),
 				},
 			}
 			

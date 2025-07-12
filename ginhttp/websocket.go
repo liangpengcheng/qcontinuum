@@ -84,6 +84,11 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 				Connection: wsConnection,
 				ID:         0,
 				Proc:       proc,
+				fd:         -1,
+				state:      int32(network.PeerStateConnected),
+				lastActive: time.Now().Unix(),
+				reader:     network.NewAsyncMessageReader(),
+				writer:     network.NewZeroCopyMessageWriter(),
 			},
 		}
 

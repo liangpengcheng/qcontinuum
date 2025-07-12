@@ -87,6 +87,11 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 						Connection: wsConn,
 						ID:         0,
 						Proc:       proc,
+						fd:         -1,
+						state:      int32(network.PeerStateConnected),
+						lastActive: time.Now().Unix(),
+						reader:     network.NewAsyncMessageReader(),
+						writer:     network.NewZeroCopyMessageWriter(),
 					},
 				}
 
