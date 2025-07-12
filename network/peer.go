@@ -26,15 +26,15 @@ type AsyncClientPeer struct {
 	fd           int
 	Flag         int32
 	ID           int64
-	state        int32 // PeerState
+	state        int32          // PeerState
 	redirectProc unsafe.Pointer // *Processor, 使用unsafe.Pointer实现无锁
 	Proc         *Processor
-	
+
 	// 异步I/O组件
-	reader *AsyncMessageReader
-	writer *ZeroCopyMessageWriter
+	reader  *AsyncMessageReader
+	writer  *ZeroCopyMessageWriter
 	reactor *EpollReactor
-	
+
 	// 统计信息
 	bytesRead    uint64
 	bytesWritten uint64
@@ -54,7 +54,7 @@ func NewWebSocketClientPeer(conn net.Conn, proc *Processor) *ClientPeer {
 		writer:     NewZeroCopyMessageWriter(),
 		reactor:    nil, // WebSocket不使用reactor
 	}
-	
+
 	return &ClientPeer{AsyncClientPeer: peer}
 }
 
@@ -62,7 +62,7 @@ func NewWebSocketClientPeer(conn net.Conn, proc *Processor) *ClientPeer {
 func NewAsyncClientPeer(conn net.Conn, proc *Processor, reactor *EpollReactor) (*AsyncClientPeer, error) {
 	// 获取文件描述符
 	var fd int
-	
+
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
 		file, fileErr := tcpConn.File()
 		if fileErr != nil {
@@ -74,7 +74,7 @@ func NewAsyncClientPeer(conn net.Conn, proc *Processor, reactor *EpollReactor) (
 		// 对于非TCP连接，使用虚拟fd
 		fd = -1
 	}
-	
+
 	// 设置非阻塞（仅对真实的TCP连接）
 	if fd != -1 {
 		if err := setNonblock(fd); err != nil {
@@ -83,7 +83,7 @@ func NewAsyncClientPeer(conn net.Conn, proc *Processor, reactor *EpollReactor) (
 		// 在macOS上注册连接映射
 		setConnForFd(fd, conn)
 	}
-	
+
 	peer := &AsyncClientPeer{
 		Connection: conn,
 		fd:         fd,
@@ -93,9 +93,9 @@ func NewAsyncClientPeer(conn net.Conn, proc *Processor, reactor *EpollReactor) (
 		reactor:    reactor,
 		lastActive: time.Now().Unix(),
 	}
-	
+
 	atomic.StoreInt32(&peer.state, int32(PeerStateConnected))
-	
+
 	return peer, nil
 }
 
@@ -128,24 +128,24 @@ func (peer *AsyncClientPeer) Close() {
 	if !atomic.CompareAndSwapInt32(&peer.state, int32(PeerStateConnected), int32(PeerStateClosing)) {
 		return // 已经在关闭或已关闭
 	}
-	
+
 	// 从reactor移除
 	if peer.reactor != nil {
 		peer.reactor.RemoveFd(peer.fd)
 	}
-	
+
 	// 关闭连接
 	if peer.Connection != nil {
 		peer.Connection.Close()
 		peer.Connection = nil
 	}
-	
+
 	// 释放资源
 	if peer.reader != nil {
 		peer.reader.Release()
 		peer.reader = nil
 	}
-	
+
 	atomic.StoreInt32(&peer.state, int32(PeerStateClosed))
 }
 
@@ -171,7 +171,7 @@ func (peer *AsyncClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 	if peer.GetState() != PeerStateConnected {
 		return errors.New("connection is not connected")
 	}
-	
+
 	// 检查是否为WebSocket连接（fd = -1表示虚拟连接）
 	if peer.fd == -1 {
 		// 对于WebSocket连接，直接序列化并发送
@@ -179,32 +179,32 @@ func (peer *AsyncClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 		if err != nil {
 			return err
 		}
-		
+
 		// 创建带头部的完整消息
 		buffer := getBuffer()
 		defer buffer.Release()
-		
+
 		totalLen := len(data) + 8
 		if buffer.cap < totalLen {
 			buffer.Grow(totalLen)
 		}
-		
+
 		// 写入头部
 		head := MessageHead{
 			Length: int32(len(data)),
 			ID:     msgid,
 		}
 		WriteHeadToBuffer(buffer, head)
-		
+
 		// 写入消息体
 		copy(buffer.data[8:], data)
 		buffer.len = totalLen
-		
+
 		// 直接通过连接发送
 		_, err = peer.Connection.Write(buffer.data[:totalLen])
 		return err
 	}
-	
+
 	// 对于真实的TCP/UDP连接，使用异步写入器
 	return peer.writer.WriteMessage(peer.fd, msg, msgid)
 }
@@ -214,35 +214,36 @@ func (peer *AsyncClientPeer) SendMessageBuffer(data []byte) error {
 	if peer.GetState() != PeerStateConnected {
 		return errors.New("connection is not connected")
 	}
-	
+
 	// 检查是否为WebSocket连接（fd = -1表示虚拟连接）
 	if peer.fd == -1 {
 		// 对于WebSocket连接，直接发送
 		_, err := peer.Connection.Write(data)
 		return err
 	}
-	
+
 	// 对于真实的TCP/UDP连接，使用异步写入器
 	// 创建写入请求
 	buffer := getBuffer()
 	if buffer.cap < len(data) {
 		buffer.Grow(len(data))
 	}
-	
+
 	copy(buffer.data, data)
 	buffer.len = len(data)
-	
+
 	writeReq := &writeRequest{
 		fd:     peer.fd,
 		buffer: buffer,
 	}
-	
+
 	if !peer.writer.writeQueue.Push(unsafe.Pointer(writeReq)) {
 		buffer.Release()
 		return errors.New("write queue full")
 	}
-	
+
 	peer.writer.tryAsyncWrite()
+	// 注意：buffer的所有权已经转移到writeRequest，会在doWrite中释放
 	return nil
 }
 
@@ -251,22 +252,22 @@ func (peer *AsyncClientPeer) TransmitMsg(msg *Message) error {
 	if peer.GetState() != PeerStateConnected {
 		return errors.New("connection is not connected")
 	}
-	
+
 	// 创建完整消息缓冲区
 	buffer := getBuffer()
 	totalLen := int(msg.Head.Length) + 8
-	
+
 	if buffer.cap < totalLen {
 		buffer.Grow(totalLen)
 	}
-	
+
 	// 写入头部
 	WriteHeadToBuffer(buffer, msg.Head)
-	
+
 	// 写入消息体
 	copy(buffer.data[8:], msg.Body)
 	buffer.len = totalLen
-	
+
 	// 检查是否为WebSocket连接（fd = -1表示虚拟连接）
 	if peer.fd == -1 {
 		// 对于WebSocket连接，直接发送
@@ -274,20 +275,21 @@ func (peer *AsyncClientPeer) TransmitMsg(msg *Message) error {
 		buffer.Release()
 		return err
 	}
-	
+
 	// 对于真实的TCP/UDP连接，使用异步写入器
 	// 创建写入请求
 	writeReq := &writeRequest{
 		fd:     peer.fd,
 		buffer: buffer,
 	}
-	
+
 	if !peer.writer.writeQueue.Push(unsafe.Pointer(writeReq)) {
 		buffer.Release()
 		return errors.New("write queue full")
 	}
-	
+
 	peer.writer.tryAsyncWrite()
+	// 注意：buffer的所有权已经转移到writeRequest，会在doWrite中释放
 	return nil
 }
 
@@ -302,10 +304,10 @@ func (peer *AsyncClientPeer) OnRead(fd int, data []byte) error {
 	if peer.GetState() != PeerStateConnected {
 		return errors.New("peer not connected")
 	}
-	
+
 	atomic.StoreInt64(&peer.lastActive, time.Now().Unix())
 	atomic.AddUint64(&peer.bytesRead, uint64(len(data)))
-	
+
 	// 将数据投递给消息读取器
 	messages, err := peer.reader.FeedData(data)
 	if err != nil {
@@ -313,7 +315,7 @@ func (peer *AsyncClientPeer) OnRead(fd int, data []byte) error {
 		peer.Close()
 		return err
 	}
-	
+
 	// 处理解析出的消息
 	proc := peer.getProcessor()
 	for _, zcMsg := range messages {
@@ -323,7 +325,7 @@ func (peer *AsyncClientPeer) OnRead(fd int, data []byte) error {
 			Head: zcMsg.Head,
 			Body: zcMsg.GetBody(),
 		}
-		
+
 		// 处理消息
 		if proc.ImmediateMode {
 			if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
@@ -338,14 +340,15 @@ func (peer *AsyncClientPeer) OnRead(fd int, data []byte) error {
 				base.Zap().Sugar().Warnf("message queue full, dropping message")
 			}
 		}
-		
+
 		// 释放零拷贝消息
 		zcMsg.Release()
 	}
-	
-	// 释放输入数据缓冲区
-	putBuffer((*Buffer)(unsafe.Pointer(&data[0])))
-	
+
+	// 注意：data是[]byte参数，不是*Buffer对象
+	// Buffer的释放应该由调用者（epoll循环）负责
+	// 这里不应该释放buffer
+
 	return nil
 }
 
@@ -360,13 +363,13 @@ func (peer *AsyncClientPeer) OnWrite(fd int) error {
 func (peer *AsyncClientPeer) OnError(fd int, err error) {
 	base.Zap().Sugar().Warnf("peer error: %v", err)
 	peer.Close()
-	
+
 	// 发送移除事件
 	event := &Event{
 		ID:   RemoveEvent,
 		Peer: &ClientPeer{AsyncClientPeer: peer},
 	}
-	
+
 	if peer.Proc != nil {
 		select {
 		case peer.Proc.EventChan <- event:
@@ -380,13 +383,13 @@ func (peer *AsyncClientPeer) OnError(fd int, err error) {
 func (peer *AsyncClientPeer) OnClose(fd int) {
 	base.Zap().Sugar().Infof("peer connection closed")
 	peer.Close()
-	
+
 	// 发送移除事件
 	event := &Event{
 		ID:   RemoveEvent,
 		Peer: &ClientPeer{AsyncClientPeer: peer},
 	}
-	
+
 	if peer.Proc != nil {
 		select {
 		case peer.Proc.EventChan <- event:
@@ -415,34 +418,34 @@ func NewTcpConnection(address string, proc *Processor) (client *ClientPeer, err 
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 创建reactor（这里简化处理，实际应该复用全局reactor）
 	reactor, err := NewEpollReactor()
 	if err != nil {
 		socket.Close()
 		return nil, err
 	}
-	
+
 	asyncPeer, err := NewAsyncClientPeer(socket, proc, reactor)
 	if err != nil {
 		socket.Close()
 		reactor.Close()
 		return nil, err
 	}
-	
+
 	client = &ClientPeer{
 		AsyncClientPeer: asyncPeer,
 	}
-	
+
 	// 启动异步I/O
 	if err := asyncPeer.StartAsyncIO(); err != nil {
 		client.Close()
 		return nil, err
 	}
-	
+
 	// 启动reactor（在生产环境中应该复用全局reactor）
 	go reactor.Run()
-	
+
 	return client, nil
 }
 
@@ -450,11 +453,11 @@ func NewTcpConnection(address string, proc *Processor) (client *ClientPeer, err 
 func (peer *ClientPeer) ConnectionHandler() {
 	// 新的实现基于异步I/O，这个方法主要用于兼容
 	// 实际的I/O处理在AsyncIOHandler的回调中完成
-	
+
 	for peer.GetState() == PeerStateConnected {
 		time.Sleep(100 * time.Millisecond)
 	}
-	
+
 	base.Zap().Sugar().Infof("connection handler finished")
 }
 
@@ -463,6 +466,6 @@ func (peer *ClientPeer) ConnectionHandlerWithPreFunc(f func() bool) {
 	for peer.GetState() == PeerStateConnected && f() {
 		time.Sleep(100 * time.Millisecond)
 	}
-	
+
 	base.Zap().Sugar().Infof("connection handler with pre-func finished")
 }

@@ -97,7 +97,7 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 		// 使用零拷贝消息读取器
 		reader := network.NewAsyncMessageReader()
 		defer reader.Release()
-		
+
 		for {
 			_, wsConnection.IOReader, err = ws.NextReader()
 			if err != nil {
@@ -107,31 +107,34 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 
 			// 使用缓冲区池读取数据
 			buffer := network.GetBuffer() // 从池中获取缓冲区
-			defer buffer.Release()
-			
+
 			// 扩展缓冲区以适应可能的大消息
 			if buffer.Cap() < 64*1024 {
 				buffer.Grow(64 * 1024)
 			}
-			
+
 			// 读取WebSocket消息到缓冲区
 			n, err := wsConnection.IOReader.Read(buffer.Data())
 			if err != nil && err != io.EOF {
+				buffer.Release()
 				base.Zap().Sugar().Errorf("websocket read data error: %v", err)
 				return
 			}
-			
+
 			if n == 0 {
+				buffer.Release()
 				continue
 			}
-			
+
 			// 投递给零拷贝消息读取器
 			messages, err := reader.FeedData(buffer.Data()[:n])
+			buffer.Release() // 立即释放缓冲区
+
 			if err != nil {
 				base.Zap().Sugar().Warnf("message parse error: %v", err)
 				continue
 			}
-			
+
 			// 处理解析出的零拷贝消息
 			for _, zcMsg := range messages {
 				msg := &network.Message{
@@ -139,7 +142,7 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 					Head: zcMsg.Head,
 					Body: zcMsg.GetBody(), // 零拷贝获取消息体
 				}
-				
+
 				if proc.ImmediateMode {
 					if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
 						cb(msg)
@@ -149,7 +152,7 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 				} else {
 					proc.MessageChan <- msg
 				}
-				
+
 				// 释放零拷贝消息
 				zcMsg.Release()
 			}

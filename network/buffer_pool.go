@@ -1,5 +1,52 @@
 package network
 
+/*
+Buffer生命周期管理指导：
+
+1. Buffer所有权规则：
+   - 谁分配，谁释放：使用getBuffer()获取Buffer的函数负责调用putBuffer()释放
+   - 引用计数：当Buffer被多个对象共享时，使用AddRef()增加引用计数
+   - 自动释放：Buffer.Release()会自动处理引用计数，当引用计数为0时归还到池中
+
+2. 典型使用模式：
+
+   模式1 - 简单使用：
+   ```go
+   buffer := getBuffer()
+   defer buffer.Release()
+   // 使用buffer...
+   ```
+
+   模式2 - 共享Buffer：
+   ```go
+   buffer := getBuffer()
+   defer buffer.Release()
+
+   // 如果需要在其他地方使用这个buffer：
+   buffer.AddRef()
+   someStruct.buffer = buffer
+   // someStruct负责调用buffer.Release()
+   ```
+
+   模式3 - 零拷贝消息：
+   ```go
+   msg := NewZeroCopyMessage()
+   msg.Buffer = existingBuffer
+   msg.Buffer.AddRef() // 增加引用计数
+   // 当msg.Release()时，会自动减少引用计数
+   ```
+
+3. 禁止的操作：
+   - 不要将[]byte转换为*Buffer：putBuffer((*Buffer)(unsafe.Pointer(&data[0])))
+   - 不要手动管理Buffer的data字段
+   - 不要在不同的goroutine间共享Buffer而不使用引用计数
+
+4. 调试建议：
+   - 使用-race标志检测竞态条件
+   - 定期检查Buffer池的使用情况
+   - 监控内存使用，确保没有Buffer泄露
+*/
+
 import (
 	"sync"
 	"sync/atomic"
@@ -79,16 +126,16 @@ func (b *Buffer) Grow(n int) {
 	if b.cap-b.len >= n {
 		return
 	}
-	
+
 	newCap := b.cap * 2
 	for newCap < b.len+n {
 		newCap *= 2
 	}
-	
+
 	if newCap > maxBufferSize {
 		newCap = maxBufferSize
 	}
-	
+
 	newData := make([]byte, newCap)
 	copy(newData, b.data[:b.len])
 	b.data = newData
@@ -98,6 +145,11 @@ func (b *Buffer) Grow(n int) {
 // BufferPool 无锁缓冲区池
 type BufferPool struct {
 	pool sync.Pool
+	// 统计信息（用于调试）
+	allocCount int64 // 分配次数
+	freeCount  int64 // 释放次数
+	hitCount   int64 // 缓存命中次数
+	missCount  int64 // 缓存未命中次数
 }
 
 var globalBufferPool = &BufferPool{
@@ -115,17 +167,41 @@ func GetBuffer() *Buffer {
 
 // getBuffer 从池中获取缓冲区（内部API）
 func getBuffer() *Buffer {
-	buf := globalBufferPool.pool.Get().(*Buffer)
+	obj := globalBufferPool.pool.Get()
+	if obj == nil {
+		// 池中没有可用的Buffer，创建新的
+		atomic.AddInt64(&globalBufferPool.missCount, 1)
+		buf := NewBuffer(defaultBufferSize)
+		buf.Reset()
+		atomic.AddInt64(&globalBufferPool.allocCount, 1)
+		return buf
+	}
+
+	buf := obj.(*Buffer)
 	buf.Reset()
+	atomic.AddInt64(&globalBufferPool.hitCount, 1)
+	atomic.AddInt64(&globalBufferPool.allocCount, 1)
 	return buf
 }
 
 // putBuffer 归还缓冲区到池
 func putBuffer(buf *Buffer) {
+	if buf == nil {
+		return
+	}
 	if buf.cap > maxBufferSize {
 		return // 丢弃过大的缓冲区
 	}
+	atomic.AddInt64(&globalBufferPool.freeCount, 1)
 	globalBufferPool.pool.Put(buf)
+}
+
+// GetBufferStats 获取缓冲区池统计信息（用于调试）
+func GetBufferStats() (alloc, free, hit, miss int64) {
+	return atomic.LoadInt64(&globalBufferPool.allocCount),
+		atomic.LoadInt64(&globalBufferPool.freeCount),
+		atomic.LoadInt64(&globalBufferPool.hitCount),
+		atomic.LoadInt64(&globalBufferPool.missCount)
 }
 
 // RingBuffer 无锁环形缓冲区
@@ -145,7 +221,7 @@ func NewRingBuffer(size uint64) *RingBuffer {
 	if size&(size-1) != 0 {
 		panic("size must be power of 2")
 	}
-	
+
 	return &RingBuffer{
 		buffer: make([]unsafe.Pointer, size),
 		mask:   size - 1,
@@ -156,11 +232,11 @@ func NewRingBuffer(size uint64) *RingBuffer {
 func (rb *RingBuffer) Push(data unsafe.Pointer) bool {
 	head := atomic.LoadUint64(&rb.head)
 	tail := atomic.LoadUint64(&rb.tail)
-	
+
 	if head-tail >= uint64(len(rb.buffer)) {
 		return false // 缓冲区满
 	}
-	
+
 	rb.buffer[head&rb.mask] = data
 	atomic.StoreUint64(&rb.head, head+1)
 	return true
@@ -170,11 +246,11 @@ func (rb *RingBuffer) Push(data unsafe.Pointer) bool {
 func (rb *RingBuffer) Pop() unsafe.Pointer {
 	tail := atomic.LoadUint64(&rb.tail)
 	head := atomic.LoadUint64(&rb.head)
-	
+
 	if tail >= head {
 		return nil // 缓冲区空
 	}
-	
+
 	data := rb.buffer[tail&rb.mask]
 	atomic.StoreUint64(&rb.tail, tail+1)
 	return data

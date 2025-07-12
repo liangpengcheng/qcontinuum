@@ -1,3 +1,4 @@
+//go:build darwin
 // +build darwin
 
 package network
@@ -53,7 +54,7 @@ func (r *EpollReactor) AddFd(fd int, events uint32, handler AsyncIOHandler) erro
 
 	// kqueue使用不同的事件类型
 	var kevents []syscall.Kevent_t
-	
+
 	if events&EventRead != 0 {
 		kev := syscall.Kevent_t{
 			Ident:  uint64(fd),
@@ -62,7 +63,7 @@ func (r *EpollReactor) AddFd(fd int, events uint32, handler AsyncIOHandler) erro
 		}
 		kevents = append(kevents, kev)
 	}
-	
+
 	if events&EventWrite != 0 {
 		kev := syscall.Kevent_t{
 			Ident:  uint64(fd),
@@ -83,7 +84,7 @@ func (r *EpollReactor) ModifyFd(fd int, events uint32) error {
 	r.mu.RLock()
 	handler := r.handlers[fd]
 	r.mu.RUnlock()
-	
+
 	if handler != nil {
 		return r.AddFd(fd, events, handler)
 	}
@@ -145,7 +146,7 @@ func (r *EpollReactor) Run() {
 			if event.Filter == syscall.EVFILT_READ {
 				// 读事件 - 使用简化的读取方式
 				buffer := getBuffer()
-				
+
 				// 在macOS上，直接读取数据
 				conn := getConnFromFd(fd)
 				if conn != nil {
@@ -164,6 +165,8 @@ func (r *EpollReactor) Run() {
 					}
 					buffer.len = n
 					handler.OnRead(fd, buffer.data[:n])
+					// 处理完后释放buffer
+					putBuffer(buffer)
 				} else {
 					putBuffer(buffer)
 				}

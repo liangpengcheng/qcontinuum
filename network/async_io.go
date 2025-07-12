@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package network
@@ -109,7 +110,8 @@ func (r *EpollReactor) Run() {
 				}
 				buffer.len = n
 				handler.OnRead(fd, buffer.data[:n])
-				// buffer会在处理完后归还
+				// 处理完后释放buffer
+				putBuffer(buffer)
 			}
 
 			if event.Events&syscall.EPOLLOUT != 0 {
