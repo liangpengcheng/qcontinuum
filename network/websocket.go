@@ -56,38 +56,73 @@ func NewWebSocket(path string, proc *Processor) {
 	http.Handle(path, websocket.Handler(
 		func(ws *websocket.Conn) {
 			base.Zap().Sugar().Infof("new webclient connected :%s", ws.RemoteAddr().String())
-			
+
 			// 创建WebSocket连接的包装器
 			wsPeer := &WebSocketPeer{Connection: ws}
-			
-			// 创建reactor（简化版本）
-			reactor, err := NewEpollReactor()
-			if err != nil {
-				base.Zap().Sugar().Errorf("failed to create reactor: %v", err)
-				ws.Close()
-				return
+
+			// 为WebSocket创建简化的peer（不使用异步I/O）
+			peer := &ClientPeer{
+				AsyncClientPeer: &AsyncClientPeer{
+					Connection: wsPeer,
+					fd:         -1,
+					Proc:       proc,
+					ID:         0,
+					state:      int32(PeerStateConnected),
+					lastActive: time.Now().Unix(),
+				},
 			}
-			
-			// 创建异步peer
-			asyncPeer, err := NewAsyncClientPeer(wsPeer, proc, reactor)
-			if err != nil {
-				base.Zap().Sugar().Errorf("failed to create async peer: %v", err)
-				reactor.Close()
-				ws.Close()
-				return
-			}
-			
-			peer := &ClientPeer{AsyncClientPeer: asyncPeer}
-			
+
 			event := &Event{
 				ID:   AddEvent,
 				Peer: peer,
 			}
 			proc.EventChan <- event
-			
-			// 启动reactor
-			go reactor.Run()
-			
-			peer.ConnectionHandler()
+			defer func() {
+				leaveEvent := &Event{
+					ID:   RemoveEvent,
+					Peer: peer,
+				}
+				proc.EventChan <- leaveEvent
+			}()
+
+			// 使用传统的消息读取循环（类似fasthttp实现）
+			buffer := make([]byte, 65536)
+			for {
+				n, err := wsPeer.Read(buffer)
+				if err != nil {
+					base.Zap().Sugar().Infof("websocket read error: %v", err)
+					return
+				}
+
+				if n < 8 {
+					base.Zap().Sugar().Warnf("message too short: %d bytes", n)
+					continue
+				}
+
+				hb := buffer[:8]
+				body := buffer[8:n]
+				h := ReadHead(hb)
+
+				if h.ID > 10000000 || h.Length < 0 || h.Length > 1024*1024*100 {
+					base.Zap().Sugar().Warnf("message error: id(%d),len(%d)", h.ID, h.Length)
+					continue
+				}
+
+				msg := &Message{
+					Peer: peer,
+					Head: h,
+					Body: body,
+				}
+
+				if proc.ImmediateMode {
+					if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
+						cb(msg)
+					} else if proc.UnHandledHandler != nil {
+						proc.UnHandledHandler(msg)
+					}
+				} else {
+					proc.MessageChan <- msg
+				}
+			}
 		}))
 }

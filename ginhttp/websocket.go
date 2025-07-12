@@ -77,25 +77,16 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 		wsConnection := &WebSocketPeer{
 			Connection: ws,
 		}
-		
-		// 创建reactor
-		reactor, err := network.NewEpollReactor()
-		if err != nil {
-			base.Zap().Sugar().Errorf("failed to create reactor: %v", err)
-			ws.Close()
-			return
+
+		// 为WebSocket创建简化的peer（不使用异步I/O）
+		peer := &network.ClientPeer{
+			AsyncClientPeer: &network.AsyncClientPeer{
+				Connection: wsConnection,
+				ID:         0,
+				Proc:       proc,
+			},
 		}
-		
-		// 创建异步peer
-		asyncPeer, err := network.NewAsyncClientPeer(wsConnection, proc, reactor)
-		if err != nil {
-			base.Zap().Sugar().Errorf("failed to create async peer: %v", err)
-			reactor.Close()
-			ws.Close()
-			return
-		}
-		
-		peer := &network.ClientPeer{AsyncClientPeer: asyncPeer}
+
 		event := &network.Event{
 			ID:   network.AddEvent,
 			Peer: peer,
@@ -108,17 +99,46 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 			proc.EventChan <- leaveEvent
 		}()
 		proc.EventChan <- event
-		
-		// 启动reactor
-		go reactor.Run()
-		
-		peer.ConnectionHandlerWithPreFunc(func() bool {
+
+		// 使用传统的消息读取循环
+		buffer := make([]byte, 65536)
+		for {
 			_, wsConnection.IOReader, err = ws.NextReader()
 			if err != nil {
 				base.Zap().Sugar().Errorf("websocket read error: %v", err)
-				return false
+				return
 			}
-			return true
-		})
+
+			n, err := io.ReadAtLeast(wsConnection.IOReader, buffer, 8)
+			if err != nil {
+				base.Zap().Sugar().Errorf("websocket read message error: %v", err)
+				return
+			}
+
+			hb := buffer[:8]
+			body := buffer[8:n]
+			h := network.ReadHead(hb)
+
+			if h.ID > 10000000 || h.Length < 0 || h.Length > 1024*1024*100 {
+				base.Zap().Sugar().Warnf("message error: id(%d),len(%d)", h.ID, h.Length)
+				continue
+			}
+
+			msg := &network.Message{
+				Peer: peer,
+				Head: h,
+				Body: body,
+			}
+
+			if proc.ImmediateMode {
+				if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
+					cb(msg)
+				} else if proc.UnHandledHandler != nil {
+					proc.UnHandledHandler(msg)
+				}
+			} else {
+				proc.MessageChan <- msg
+			}
+		}
 	})
 }

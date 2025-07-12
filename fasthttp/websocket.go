@@ -81,24 +81,15 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 				// 创建WebSocket连接包装器
 				wsConn := &WebSocketPeer{Connection: ws}
 
-				// 创建reactor
-				reactor, err := network.NewEpollReactor()
-				if err != nil {
-					base.Zap().Sugar().Errorf("failed to create reactor: %v", err)
-					ws.Close()
-					return
+				// 为WebSocket创建简化的peer（不使用异步I/O）
+				peer := &network.ClientPeer{
+					AsyncClientPeer: &network.AsyncClientPeer{
+						Connection: wsConn,
+						ID:         0,
+						Proc:       proc,
+					},
 				}
 
-				// 创建异步peer
-				asyncPeer, err := network.NewAsyncClientPeer(wsConn, proc, reactor)
-				if err != nil {
-					base.Zap().Sugar().Errorf("failed to create async peer: %v", err)
-					reactor.Close()
-					ws.Close()
-					return
-				}
-
-				peer := &network.ClientPeer{AsyncClientPeer: asyncPeer}
 				event := &network.Event{
 					ID:   network.AddEvent,
 					Peer: peer,
@@ -111,11 +102,8 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 					}
 					proc.EventChan <- leaveEvent
 				}()
-				
-				// 启动reactor
-				go reactor.Run()
-				
-				// 使用传统的消息读取循环（为了保持兼容性）
+
+				// 使用传统的消息读取循环（已存在的逻辑）
 				for {
 					mt, content, err := ws.ReadMessage()
 					if err != nil {
@@ -127,7 +115,7 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 					body := content[8:]
 					if mt == websocket.BinaryMessage {
 						h := network.ReadHead(hb)
-						if h.ID > 10000000 || h.Length < 0 || h.Length > 1024*1024*10 {
+						if h.ID > 10000000 || h.Length < 0 || h.Length > 1024*1024*100 {
 							base.Zap().Sugar().Warnf("message error: id(%d),len(%d)", h.ID, h.Length)
 							continue
 						}
