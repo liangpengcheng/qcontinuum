@@ -100,8 +100,10 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 		}()
 		proc.EventChan <- event
 
-		// 使用传统的消息读取循环
-		buffer := make([]byte, 65536)
+		// 使用零拷贝消息读取器
+		reader := network.NewAsyncMessageReader()
+		defer reader.Release()
+		
 		for {
 			_, wsConnection.IOReader, err = ws.NextReader()
 			if err != nil {
@@ -109,35 +111,53 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 				return
 			}
 
-			n, err := io.ReadAtLeast(wsConnection.IOReader, buffer, 8)
-			if err != nil {
-				base.Zap().Sugar().Errorf("websocket read message error: %v", err)
+			// 使用缓冲区池读取数据
+			buffer := network.GetBuffer() // 从池中获取缓冲区
+			defer buffer.Release()
+			
+			// 扩展缓冲区以适应可能的大消息
+			if buffer.Cap() < 64*1024 {
+				buffer.Grow(64 * 1024)
+			}
+			
+			// 读取WebSocket消息到缓冲区
+			n, err := wsConnection.IOReader.Read(buffer.Data())
+			if err != nil && err != io.EOF {
+				base.Zap().Sugar().Errorf("websocket read data error: %v", err)
 				return
 			}
-
-			hb := buffer[:8]
-			body := buffer[8:n]
-			h := network.ReadHead(hb)
-
-			if h.ID > 10000000 || h.Length < 0 || h.Length > 1024*1024*100 {
-				base.Zap().Sugar().Warnf("message error: id(%d),len(%d)", h.ID, h.Length)
+			
+			if n == 0 {
 				continue
 			}
-
-			msg := &network.Message{
-				Peer: peer,
-				Head: h,
-				Body: body,
+			
+			// 投递给零拷贝消息读取器
+			messages, err := reader.FeedData(buffer.Data()[:n])
+			if err != nil {
+				base.Zap().Sugar().Warnf("message parse error: %v", err)
+				continue
 			}
-
-			if proc.ImmediateMode {
-				if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
-					cb(msg)
-				} else if proc.UnHandledHandler != nil {
-					proc.UnHandledHandler(msg)
+			
+			// 处理解析出的零拷贝消息
+			for _, zcMsg := range messages {
+				msg := &network.Message{
+					Peer: peer,
+					Head: zcMsg.Head,
+					Body: zcMsg.GetBody(), // 零拷贝获取消息体
 				}
-			} else {
-				proc.MessageChan <- msg
+				
+				if proc.ImmediateMode {
+					if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
+						cb(msg)
+					} else if proc.UnHandledHandler != nil {
+						proc.UnHandledHandler(msg)
+					}
+				} else {
+					proc.MessageChan <- msg
+				}
+				
+				// 释放零拷贝消息
+				zcMsg.Release()
 			}
 		}
 	})

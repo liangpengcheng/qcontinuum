@@ -135,24 +135,35 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *network.AsyncClientPeer, conn
 		atomic.AddUint64(&s.connCount, ^uint64(0)) // 原子递减
 	}()
 	
-	// KCP连接的读取循环
-	buffer := make([]byte, 65536)
+	// KCP连接的读取循环，使用零拷贝缓冲区池
 	reader := network.NewAsyncMessageReader()
 	defer reader.Release()
 	
 	for peer.GetState() == network.PeerStateConnected {
-		n, err := conn.Read(buffer)
+		// 使用缓冲区池
+		buffer := network.GetBuffer()
+		
+		// 扩展缓冲区以适应KCP数据包
+		if buffer.Cap() < 32*1024 {
+			buffer.Grow(32 * 1024)
+		}
+		
+		n, err := conn.Read(buffer.Data())
 		if err != nil {
+			buffer.Release()
 			base.Zap().Sugar().Debugf("kcp read error: %v", err)
 			break
 		}
 		
 		if n == 0 {
+			buffer.Release()
 			continue
 		}
 		
 		// 处理接收到的数据
-		messages, err := reader.FeedData(buffer[:n])
+		messages, err := reader.FeedData(buffer.Data()[:n])
+		buffer.Release() // 立即释放缓冲区
+		
 		if err != nil {
 			base.Zap().Sugar().Warnf("kcp message parse error: %v", err)
 			break

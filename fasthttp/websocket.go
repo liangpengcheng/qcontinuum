@@ -103,37 +103,51 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 					proc.EventChan <- leaveEvent
 				}()
 
-				// 使用传统的消息读取循环（已存在的逻辑）
+				// 使用零拷贝消息读取器处理WebSocket消息
+				reader := network.NewAsyncMessageReader()
+				defer reader.Release()
+				
 				for {
 					mt, content, err := ws.ReadMessage()
 					if err != nil {
-
 						//base.Zap().Sugar().Errorf("read websocket message error %v", err)
 						return
 					}
-					hb := content[:8]
-					body := content[8:]
+					
+					if len(content) < 8 {
+						base.Zap().Sugar().Warnf("message too short: %d bytes", len(content))
+						continue
+					}
+					
 					if mt == websocket.BinaryMessage {
-						h := network.ReadHead(hb)
-						if h.ID > 10000000 || h.Length < 0 || h.Length > 1024*1024*100 {
-							base.Zap().Sugar().Warnf("message error: id(%d),len(%d)", h.ID, h.Length)
+						// 直接将WebSocket消息投递给零拷贝读取器
+						messages, err := reader.FeedData(content)
+						if err != nil {
+							base.Zap().Sugar().Warnf("message parse error: %v", err)
 							continue
 						}
-						msg := &network.Message{
-							Peer: peer,
-							Head: h,
-							Body: body,
-						}
-						if proc.ImmediateMode {
-							if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
-								cb(msg)
-							} else if proc.UnHandledHandler != nil {
-								proc.UnHandledHandler(msg)
+						
+						// 处理解析出的零拷贝消息
+						for _, zcMsg := range messages {
+							msg := &network.Message{
+								Peer: peer,
+								Head: zcMsg.Head,
+								Body: zcMsg.GetBody(), // 零拷贝获取消息体
 							}
-						} else {
-							proc.MessageChan <- msg
+							
+							if proc.ImmediateMode {
+								if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
+									cb(msg)
+								} else if proc.UnHandledHandler != nil {
+									proc.UnHandledHandler(msg)
+								}
+							} else {
+								proc.MessageChan <- msg
+							}
+							
+							// 释放零拷贝消息
+							zcMsg.Release()
 						}
-
 					} else {
 						base.Zap().Sugar().Warnf("unsupport message type")
 					}

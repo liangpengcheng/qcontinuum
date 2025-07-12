@@ -34,6 +34,28 @@ func (b *Buffer) Bytes() []byte {
 	return b.data[:b.len]
 }
 
+// Data 返回底层数据数组（用于直接写入）
+func (b *Buffer) Data() []byte {
+	return b.data
+}
+
+// Cap 返回缓冲区容量
+func (b *Buffer) Cap() int {
+	return b.cap
+}
+
+// Len 返回有效数据长度
+func (b *Buffer) Len() int {
+	return b.len
+}
+
+// SetLen 设置有效数据长度
+func (b *Buffer) SetLen(n int) {
+	if n >= 0 && n <= b.cap {
+		b.len = n
+	}
+}
+
 // AddRef 增加引用计数
 func (b *Buffer) AddRef() {
 	atomic.AddInt32(&b.refs, 1)
@@ -86,7 +108,12 @@ var globalBufferPool = &BufferPool{
 	},
 }
 
-// getBuffer 从池中获取缓冲区
+// GetBuffer 从池中获取缓冲区（公共API）
+func GetBuffer() *Buffer {
+	return getBuffer()
+}
+
+// getBuffer 从池中获取缓冲区（内部API）
 func getBuffer() *Buffer {
 	buf := globalBufferPool.pool.Get().(*Buffer)
 	buf.Reset()
