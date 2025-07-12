@@ -6,7 +6,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"syscall"
-	"unsafe"
 
 	"github.com/liangpengcheng/qcontinuum/base"
 )

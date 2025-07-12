@@ -6,7 +6,7 @@ import "syscall"
 
 // Linux平台的事件常量
 const (
-	EpollIn  = syscall.EPOLLIN
-	EpollOut = syscall.EPOLLOUT
-	EpollET  = syscall.EPOLLET
+	EpollIn  = uint32(syscall.EPOLLIN)
+	EpollOut = uint32(syscall.EPOLLOUT)
+	EpollET  = uint32(syscall.EPOLLET)
 )
