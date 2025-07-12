@@ -76,13 +76,29 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 			}()
 			err := upgrader.Upgrade(ctx, func(ws *websocket.Conn) {
 				defer ws.Close()
+				base.Zap().Sugar().Infof("new webclient connected :%s", ws.RemoteAddr().String())
 
-				peer := &network.ClientPeer{
-					Connection: &WebSocketPeer{
-						Connection: ws,
-					},
-					Proc: proc,
+				// 创建WebSocket连接包装器
+				wsConn := &WebSocketPeer{Connection: ws}
+
+				// 创建reactor
+				reactor, err := network.NewEpollReactor()
+				if err != nil {
+					base.Zap().Sugar().Errorf("failed to create reactor: %v", err)
+					ws.Close()
+					return
 				}
+
+				// 创建异步peer
+				asyncPeer, err := network.NewAsyncClientPeer(wsConn, proc, reactor)
+				if err != nil {
+					base.Zap().Sugar().Errorf("failed to create async peer: %v", err)
+					reactor.Close()
+					ws.Close()
+					return
+				}
+
+				peer := &network.ClientPeer{AsyncClientPeer: asyncPeer}
 				event := &network.Event{
 					ID:   network.AddEvent,
 					Peer: peer,
@@ -95,6 +111,11 @@ func SetupWebsocket(proc *network.Processor, path string, r *router.Router) {
 					}
 					proc.EventChan <- leaveEvent
 				}()
+				
+				// 启动reactor
+				go reactor.Run()
+				
+				// 使用传统的消息读取循环（为了保持兼容性）
 				for {
 					mt, content, err := ws.ReadMessage()
 					if err != nil {

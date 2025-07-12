@@ -56,18 +56,38 @@ func NewWebSocket(path string, proc *Processor) {
 	http.Handle(path, websocket.Handler(
 		func(ws *websocket.Conn) {
 			base.Zap().Sugar().Infof("new webclient connected :%s", ws.RemoteAddr().String())
-			peer := &ClientPeer{
-				Connection: &WebSocketPeer{
-					Connection: ws,
-				},
-				Proc: proc,
+			
+			// 创建WebSocket连接的包装器
+			wsPeer := &WebSocketPeer{Connection: ws}
+			
+			// 创建reactor（简化版本）
+			reactor, err := NewEpollReactor()
+			if err != nil {
+				base.Zap().Sugar().Errorf("failed to create reactor: %v", err)
+				ws.Close()
+				return
 			}
+			
+			// 创建异步peer
+			asyncPeer, err := NewAsyncClientPeer(wsPeer, proc, reactor)
+			if err != nil {
+				base.Zap().Sugar().Errorf("failed to create async peer: %v", err)
+				reactor.Close()
+				ws.Close()
+				return
+			}
+			
+			peer := &ClientPeer{AsyncClientPeer: asyncPeer}
+			
 			event := &Event{
 				ID:   AddEvent,
 				Peer: peer,
 			}
 			proc.EventChan <- event
+			
+			// 启动reactor
+			go reactor.Run()
+			
 			peer.ConnectionHandler()
-
 		}))
 }

@@ -77,10 +77,25 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 		wsConnection := &WebSocketPeer{
 			Connection: ws,
 		}
-		peer := &network.ClientPeer{
-			Connection: wsConnection,
-			Proc:       proc,
+		
+		// 创建reactor
+		reactor, err := network.NewEpollReactor()
+		if err != nil {
+			base.Zap().Sugar().Errorf("failed to create reactor: %v", err)
+			ws.Close()
+			return
 		}
+		
+		// 创建异步peer
+		asyncPeer, err := network.NewAsyncClientPeer(wsConnection, proc, reactor)
+		if err != nil {
+			base.Zap().Sugar().Errorf("failed to create async peer: %v", err)
+			reactor.Close()
+			ws.Close()
+			return
+		}
+		
+		peer := &network.ClientPeer{AsyncClientPeer: asyncPeer}
 		event := &network.Event{
 			ID:   network.AddEvent,
 			Peer: peer,
@@ -93,6 +108,10 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 			proc.EventChan <- leaveEvent
 		}()
 		proc.EventChan <- event
+		
+		// 启动reactor
+		go reactor.Run()
+		
 		peer.ConnectionHandlerWithPreFunc(func() bool {
 			_, wsConnection.IOReader, err = ws.NextReader()
 			if err != nil {
