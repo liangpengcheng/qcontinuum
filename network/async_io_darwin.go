@@ -55,7 +55,7 @@ func (r *EpollReactor) AddFd(fd int, events uint32, handler AsyncIOHandler) erro
 	// kqueue使用不同的事件类型
 	var kevents []syscall.Kevent_t
 
-	if events&EventRead != 0 {
+	if events&EpollIn != 0 {
 		kev := syscall.Kevent_t{
 			Ident:  uint64(fd),
 			Filter: syscall.EVFILT_READ,
@@ -64,7 +64,7 @@ func (r *EpollReactor) AddFd(fd int, events uint32, handler AsyncIOHandler) erro
 		kevents = append(kevents, kev)
 	}
 
-	if events&EventWrite != 0 {
+	if events&EpollOut != 0 {
 		kev := syscall.Kevent_t{
 			Ident:  uint64(fd),
 			Filter: syscall.EVFILT_WRITE,

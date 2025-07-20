@@ -130,8 +130,13 @@ func (peer *AsyncClientPeer) Close() {
 	}
 
 	// 从reactor移除
-	if peer.reactor != nil {
+	if peer.reactor != nil && peer.fd != -1 {
 		peer.reactor.RemoveFd(peer.fd)
+	}
+
+	// 清理连接映射（macOS）
+	if peer.fd != -1 {
+		removeConnFromFd(peer.fd)
 	}
 
 	// 关闭连接
@@ -144,6 +149,21 @@ func (peer *AsyncClientPeer) Close() {
 	if peer.reader != nil {
 		peer.reader.Release()
 		peer.reader = nil
+	}
+
+	if peer.writer != nil {
+		// 清空写入队列中的缓冲区
+		for {
+			ptr := peer.writer.writeQueue.Pop()
+			if ptr == nil {
+				break
+			}
+			req := (*writeRequest)(ptr)
+			if req.buffer != nil {
+				req.buffer.Release()
+			}
+		}
+		peer.writer = nil
 	}
 
 	atomic.StoreInt32(&peer.state, int32(PeerStateClosed))
@@ -181,11 +201,11 @@ func (peer *AsyncClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 		}
 
 		// 创建带头部的完整消息
-		buffer := getBuffer()
+		buffer := GetBuffer()
 		defer buffer.Release()
 
 		totalLen := len(data) + 8
-		if buffer.cap < totalLen {
+		if buffer.Cap() < totalLen {
 			buffer.Grow(totalLen)
 		}
 
@@ -197,11 +217,12 @@ func (peer *AsyncClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 		WriteHeadToBuffer(buffer, head)
 
 		// 写入消息体
-		copy(buffer.data[8:], data)
-		buffer.len = totalLen
+		copy(buffer.Data()[8:], data)
+		buffer.SetLen(totalLen)
 
 		// 直接通过连接发送
-		_, err = peer.Connection.Write(buffer.data[:totalLen])
+		_, err = peer.Connection.Write(buffer.Bytes())
+		atomic.AddUint64(&peer.bytesWritten, uint64(totalLen))
 		return err
 	}
 
@@ -219,18 +240,19 @@ func (peer *AsyncClientPeer) SendMessageBuffer(data []byte) error {
 	if peer.fd == -1 {
 		// 对于WebSocket连接，直接发送
 		_, err := peer.Connection.Write(data)
+		atomic.AddUint64(&peer.bytesWritten, uint64(len(data)))
 		return err
 	}
 
 	// 对于真实的TCP/UDP连接，使用异步写入器
 	// 创建写入请求
-	buffer := getBuffer()
-	if buffer.cap < len(data) {
+	buffer := GetBuffer()
+	if buffer.Cap() < len(data) {
 		buffer.Grow(len(data))
 	}
 
-	copy(buffer.data, data)
-	buffer.len = len(data)
+	copy(buffer.Data(), data)
+	buffer.SetLen(len(data))
 
 	writeReq := &writeRequest{
 		fd:     peer.fd,
@@ -254,10 +276,10 @@ func (peer *AsyncClientPeer) TransmitMsg(msg *Message) error {
 	}
 
 	// 创建完整消息缓冲区
-	buffer := getBuffer()
+	buffer := GetBuffer()
 	totalLen := int(msg.Head.Length) + 8
 
-	if buffer.cap < totalLen {
+	if buffer.Cap() < totalLen {
 		buffer.Grow(totalLen)
 	}
 
@@ -265,13 +287,14 @@ func (peer *AsyncClientPeer) TransmitMsg(msg *Message) error {
 	WriteHeadToBuffer(buffer, msg.Head)
 
 	// 写入消息体
-	copy(buffer.data[8:], msg.Body)
-	buffer.len = totalLen
+	copy(buffer.Data()[8:], msg.Body)
+	buffer.SetLen(totalLen)
 
 	// 检查是否为WebSocket连接（fd = -1表示虚拟连接）
 	if peer.fd == -1 {
 		// 对于WebSocket连接，直接发送
-		_, err := peer.Connection.Write(buffer.data[:totalLen])
+		_, err := peer.Connection.Write(buffer.Bytes())
+		atomic.AddUint64(&peer.bytesWritten, uint64(totalLen))
 		buffer.Release()
 		return err
 	}
@@ -361,40 +384,55 @@ func (peer *AsyncClientPeer) OnWrite(fd int) error {
 
 // OnError 实现AsyncIOHandler接口 - 处理错误事件
 func (peer *AsyncClientPeer) OnError(fd int, err error) {
-	base.Zap().Sugar().Warnf("peer error: %v", err)
-	peer.Close()
+	base.Zap().Sugar().Warnf("peer error on fd %d: %v", fd, err)
 
-	// 发送移除事件
-	event := &Event{
-		ID:   RemoveEvent,
-		Peer: &ClientPeer{AsyncClientPeer: peer},
-	}
+	// 安全关闭连接
+	if peer.GetState() == PeerStateConnected {
+		peer.Close()
 
-	if peer.Proc != nil {
-		select {
-		case peer.Proc.EventChan <- event:
-		default:
-			base.Zap().Sugar().Warnf("event queue full")
+		// 发送移除事件
+		event := &Event{
+			ID:   RemoveEvent,
+			Peer: &ClientPeer{AsyncClientPeer: peer},
+		}
+
+		proc := peer.getProcessor()
+		if proc != nil {
+			select {
+			case proc.EventChan <- event:
+			default:
+				base.Zap().Sugar().Errorf("event queue full when handling error, dropping remove event")
+			}
 		}
 	}
 }
 
 // OnClose 实现AsyncIOHandler接口 - 处理关闭事件
 func (peer *AsyncClientPeer) OnClose(fd int) {
-	base.Zap().Sugar().Infof("peer connection closed")
-	peer.Close()
+	base.Zap().Sugar().Infof("peer connection closed on fd %d", fd)
 
-	// 发送移除事件
-	event := &Event{
-		ID:   RemoveEvent,
-		Peer: &ClientPeer{AsyncClientPeer: peer},
-	}
+	// 获取最终统计信息
+	bytesRead, bytesWritten, lastActive := peer.GetStats()
+	base.Zap().Sugar().Debugf("connection stats: read=%d, written=%d, last_active=%v",
+		bytesRead, bytesWritten, lastActive)
 
-	if peer.Proc != nil {
-		select {
-		case peer.Proc.EventChan <- event:
-		default:
-			base.Zap().Sugar().Warnf("event queue full")
+	// 安全关闭连接
+	if peer.GetState() != PeerStateClosed {
+		peer.Close()
+
+		// 发送移除事件
+		event := &Event{
+			ID:   RemoveEvent,
+			Peer: &ClientPeer{AsyncClientPeer: peer},
+		}
+
+		proc := peer.getProcessor()
+		if proc != nil {
+			select {
+			case proc.EventChan <- event:
+			default:
+				base.Zap().Sugar().Errorf("event queue full when handling close, dropping remove event")
+			}
 		}
 	}
 }

@@ -36,11 +36,14 @@ func NewZeroCopyMessage() *ZeroCopyMessage {
 
 // GetBody 获取消息体（零拷贝）
 func (m *ZeroCopyMessage) GetBody() []byte {
-	bodySize := int(m.Head.Length)
-	if m.Offset+bodySize > m.Buffer.len {
+	if m.Buffer == nil {
 		return nil
 	}
-	return m.Buffer.data[m.Offset : m.Offset+bodySize]
+	bodySize := int(m.Head.Length)
+	if m.Offset+bodySize > m.Buffer.Len() {
+		return nil
+	}
+	return m.Buffer.Data()[m.Offset : m.Offset+bodySize]
 }
 
 // Release 释放消息
@@ -65,13 +68,13 @@ func ReadHeadFromBuffer(data []byte) (MessageHead, error) {
 
 // WriteHeadToBuffer 零拷贝写入消息头到缓冲区
 func WriteHeadToBuffer(buffer *Buffer, head MessageHead) {
-	if buffer.cap-buffer.len < 8 {
+	if buffer.Cap()-buffer.Len() < 8 {
 		buffer.Grow(8)
 	}
 
 	// 直接内存写入
-	*(*MessageHead)(unsafe.Pointer(&buffer.data[buffer.len])) = head
-	buffer.len += 8
+	*(*MessageHead)(unsafe.Pointer(&buffer.Data()[buffer.Len()])) = head
+	buffer.SetLen(buffer.Len() + 8)
 }
 
 // AsyncMessageReader 异步消息读取器
@@ -85,7 +88,7 @@ type AsyncMessageReader struct {
 // NewAsyncMessageReader 创建异步消息读取器
 func NewAsyncMessageReader() *AsyncMessageReader {
 	return &AsyncMessageReader{
-		buffer:      getBuffer(),
+		buffer:      GetBuffer(),
 		bytesNeeded: 8, // 先读取8字节头部
 	}
 }
@@ -95,19 +98,19 @@ func (r *AsyncMessageReader) FeedData(data []byte) ([]*ZeroCopyMessage, error) {
 	var messages []*ZeroCopyMessage
 
 	// 确保缓冲区足够大
-	if r.buffer.len+len(data) > r.buffer.cap {
+	if r.buffer.Len()+len(data) > r.buffer.Cap() {
 		r.buffer.Grow(len(data))
 	}
 
 	// 零拷贝追加数据
-	copy(r.buffer.data[r.buffer.len:], data)
-	r.buffer.len += len(data)
+	copy(r.buffer.Data()[r.buffer.Len():], data)
+	r.buffer.SetLen(r.buffer.Len() + len(data))
 
 	for {
 		if !r.headerParsed {
 			// 尝试解析消息头
-			if r.buffer.len >= 8 {
-				head, err := ReadHeadFromBuffer(r.buffer.data)
+			if r.buffer.Len() >= 8 {
+				head, err := ReadHeadFromBuffer(r.buffer.Data())
 				if err != nil {
 					return nil, err
 				}
@@ -122,8 +125,8 @@ func (r *AsyncMessageReader) FeedData(data []byte) ([]*ZeroCopyMessage, error) {
 				r.bytesNeeded = int(head.Length)
 
 				// 移除已解析的头部
-				copy(r.buffer.data, r.buffer.data[8:r.buffer.len])
-				r.buffer.len -= 8
+				copy(r.buffer.Data(), r.buffer.Data()[8:r.buffer.Len()])
+				r.buffer.SetLen(r.buffer.Len() - 8)
 			} else {
 				break
 			}
@@ -131,7 +134,7 @@ func (r *AsyncMessageReader) FeedData(data []byte) ([]*ZeroCopyMessage, error) {
 
 		if r.headerParsed {
 			// 检查是否有完整消息体
-			if r.buffer.len >= r.bytesNeeded {
+			if r.buffer.Len() >= r.bytesNeeded {
 				// 创建零拷贝消息
 				msg := NewZeroCopyMessage()
 				msg.Head = r.currentHead
@@ -143,25 +146,25 @@ func (r *AsyncMessageReader) FeedData(data []byte) ([]*ZeroCopyMessage, error) {
 				msg.Offset = 0 // 数据从缓冲区开始处开始
 
 				// 如果缓冲区中还有更多数据，需要为下一个消息创建新的缓冲区
-				if r.buffer.len > r.bytesNeeded {
+				if r.buffer.Len() > r.bytesNeeded {
 					// 创建新的缓冲区来存储剩余数据
-					remainingData := r.buffer.len - r.bytesNeeded
-					newBuffer := getBuffer()
-					if newBuffer.cap < remainingData {
+					remainingData := r.buffer.Len() - r.bytesNeeded
+					newBuffer := GetBuffer()
+					if newBuffer.Cap() < remainingData {
 						newBuffer.Grow(remainingData)
 					}
-					copy(newBuffer.data, r.buffer.data[r.bytesNeeded:r.buffer.len])
-					newBuffer.len = remainingData
+					copy(newBuffer.Data(), r.buffer.Data()[r.bytesNeeded:r.buffer.Len()])
+					newBuffer.SetLen(remainingData)
 
 					// 更新缓冲区长度到当前消息的大小
-					r.buffer.len = r.bytesNeeded
+					r.buffer.SetLen(r.bytesNeeded)
 
 					// 切换到新的缓冲区
 					r.buffer = newBuffer
 				} else {
 					// 缓冲区中正好是一个完整消息，获取新的缓冲区
-					r.buffer.len = r.bytesNeeded
-					r.buffer = getBuffer()
+					r.buffer.SetLen(r.bytesNeeded)
+					r.buffer = GetBuffer()
 				}
 
 				messages = append(messages, msg)
@@ -208,10 +211,10 @@ func (w *ZeroCopyMessageWriter) WriteMessage(fd int, msg proto.Message, msgID in
 	}
 
 	// 创建带头部的完整消息
-	buffer := getBuffer()
+	buffer := GetBuffer()
 	totalLen := len(data)
 
-	if buffer.cap < totalLen+8 {
+	if buffer.Cap() < totalLen+8 {
 		buffer.Grow(totalLen + 8)
 	}
 
@@ -223,8 +226,8 @@ func (w *ZeroCopyMessageWriter) WriteMessage(fd int, msg proto.Message, msgID in
 	WriteHeadToBuffer(buffer, head)
 
 	// 写入消息体
-	copy(buffer.data[8:], data)
-	buffer.len = totalLen + 8
+	copy(buffer.Data()[8:], data)
+	buffer.SetLen(totalLen + 8)
 
 	// 加入写入队列
 	writeReq := &writeRequest{
@@ -274,8 +277,8 @@ func (w *ZeroCopyMessageWriter) tryAsyncWrite() {
 func (w *ZeroCopyMessageWriter) doWrite(req *writeRequest) {
 	defer req.buffer.Release()
 
-	for req.offset < req.buffer.len {
-		n, err := syscall.Write(req.fd, req.buffer.data[req.offset:req.buffer.len])
+	for req.offset < req.buffer.Len() {
+		n, err := syscall.Write(req.fd, req.buffer.Data()[req.offset:req.buffer.Len()])
 		if err != nil {
 			if err == syscall.EAGAIN {
 				// 暂时无法写入，重新加入队列
@@ -299,21 +302,21 @@ func ReadHead(src []byte) MessageHead {
 
 // ReadFromConnect 读取消息 (兼容旧接口)
 func ReadFromConnect(conn io.Reader, length int) ([]byte, error) {
-	buffer := getBuffer()
+	buffer := GetBuffer()
 	defer buffer.Release()
 
-	if buffer.cap < length {
+	if buffer.Cap() < length {
 		buffer.Grow(length)
 	}
 
-	n, err := io.ReadFull(conn, buffer.data[:length])
+	n, err := io.ReadFull(conn, buffer.Data()[:length])
 	if err != nil {
 		return nil, err
 	}
 
 	// 返回数据拷贝以保持兼容性
 	result := make([]byte, n)
-	copy(result, buffer.data[:n])
+	copy(result, buffer.Data()[:n])
 	return result, nil
 }
 
@@ -324,11 +327,11 @@ func GetMessageBuffer(msg proto.Message, id int32) ([]byte, error) {
 		return nil, err
 	}
 
-	buffer := getBuffer()
+	buffer := GetBuffer()
 	defer buffer.Release()
 
 	totalLen := len(data) + 8
-	if buffer.cap < totalLen {
+	if buffer.Cap() < totalLen {
 		buffer.Grow(totalLen)
 	}
 
@@ -340,11 +343,11 @@ func GetMessageBuffer(msg proto.Message, id int32) ([]byte, error) {
 	WriteHeadToBuffer(buffer, head)
 
 	// 写入消息体
-	copy(buffer.data[8:], data)
-	buffer.len = totalLen
+	copy(buffer.Data()[8:], data)
+	buffer.SetLen(totalLen)
 
 	// 返回拷贝以保持兼容性
 	result := make([]byte, totalLen)
-	copy(result, buffer.data[:totalLen])
+	copy(result, buffer.Bytes())
 	return result, nil
 }

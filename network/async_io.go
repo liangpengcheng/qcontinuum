@@ -4,6 +4,7 @@
 package network
 
 import (
+	"net"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -134,4 +135,28 @@ func (r *EpollReactor) Stop() {
 func (r *EpollReactor) Close() error {
 	r.Stop()
 	return syscall.Close(r.epfd)
+}
+
+// setNonblock 设置文件描述符为非阻塞 (Linux)
+func setNonblock(fd int) error {
+	if fd == -1 {
+		return nil // 虚拟fd，跳过
+	}
+	return syscall.SetNonblock(fd, true)
+}
+
+// setConnForFd Linux上不需要连接映射
+func setConnForFd(fd int, conn net.Conn) {
+	// Linux直接使用fd操作，不需要连接映射
+}
+
+// getConnFromFd Linux上不需要连接映射
+func getConnFromFd(fd int) net.Conn {
+	// Linux直接使用fd操作，返回nil
+	return nil
+}
+
+// removeConnFromFd Linux上不需要连接映射
+func removeConnFromFd(fd int) {
+	// Linux直接使用fd操作，不需要清理
 }
