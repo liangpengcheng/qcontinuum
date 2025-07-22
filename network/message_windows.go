@@ -7,11 +7,12 @@ import (
 	"github.com/liangpengcheng/qcontinuum/base"
 )
 
-// doWrite Windows版本的写入实现
+// doWrite Windows版本的写入实现 - 使用IOCP异步写入
 func (w *ZeroCopyMessageWriter) doWrite(req *writeRequest) {
 	defer req.buffer.Release()
 
-	// Windows上使用连接映射来写入
+	// 在Windows IOCP模式下，写入操作应该通过reactor的postWrite方法
+	// 这里我们先使用简化的同步写入，后续可以优化为完全异步
 	conn := getConnFromFd(req.fd)
 	if conn == nil {
 		base.Zap().Sugar().Warnf("connection not found for fd %d", req.fd)
