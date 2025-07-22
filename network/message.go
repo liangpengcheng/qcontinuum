@@ -4,11 +4,9 @@ import (
 	"errors"
 	"io"
 	"sync/atomic"
-	"syscall"
 	"unsafe"
 
 	"github.com/golang/protobuf/proto"
-	"github.com/liangpengcheng/qcontinuum/base"
 )
 
 var maxMessageLength = 1024 * 1024 * 100 // 100MB
@@ -273,26 +271,7 @@ func (w *ZeroCopyMessageWriter) tryAsyncWrite() {
 	}()
 }
 
-// doWrite 执行实际写入
-func (w *ZeroCopyMessageWriter) doWrite(req *writeRequest) {
-	defer req.buffer.Release()
-
-	for req.offset < req.buffer.Len() {
-		n, err := syscall.Write(req.fd, req.buffer.Data()[req.offset:req.buffer.Len()])
-		if err != nil {
-			if err == syscall.EAGAIN {
-				// 暂时无法写入，重新加入队列
-				if !w.writeQueue.Push(unsafe.Pointer(req)) {
-					base.Zap().Sugar().Warnf("failed to requeue write request")
-				}
-				return
-			}
-			base.Zap().Sugar().Warnf("write error: %v", err)
-			return
-		}
-		req.offset += n
-	}
-}
+// doWrite 执行实际写入 - 平台特定实现在message_unix.go和message_windows.go中
 
 // ReadHead read the message head (兼容旧接口)
 func ReadHead(src []byte) MessageHead {

@@ -5,23 +5,19 @@ go 1.12
 replace (
 	golang.org/x/crypto => github.com/golang/crypto v0.0.0-20190820162420-60c769a6c586
 	golang.org/x/net => github.com/golang/net v0.0.0-20190813141303-74dc4d7220e7
-	golang.org/x/sys => github.com/golang/sys v0.0.0-20190813064441-fde4db37ae7a
+	golang.org/x/sys => github.com/golang/sys v0.0.0-20220520151302-bc2c85ada10a
 )
 
 require (
 	github.com/BurntSushi/toml v1.4.0 // indirect
 	github.com/fasthttp/router v0.5.0
 	github.com/fasthttp/websocket v1.4.0
-	github.com/garyburd/redigo v1.6.0
 	github.com/gin-gonic/gin v1.9.1
 	github.com/golang/protobuf v1.5.0
-	github.com/golang/snappy v0.0.1 // indirect
-	github.com/google/uuid v1.1.1 // indirect
 	github.com/gorilla/websocket v1.4.2
 	github.com/klauspost/reedsolomon v1.9.2 // indirect
 	github.com/kr/pretty v0.3.0 // indirect
 	github.com/natefinch/lumberjack v2.0.0+incompatible
-	github.com/opentracing/opentracing-go v1.1.0 // indirect
 	github.com/pkg/errors v0.8.1 // indirect
 	github.com/rogpeppe/go-internal v1.8.0 // indirect
 	github.com/templexxx/cpufeat v0.0.0-20180724012125-cef66df7f161 // indirect
@@ -33,12 +29,6 @@ require (
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.10.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
-	gopkg.in/couchbase/gocb.v1 v1.6.2
-	gopkg.in/couchbase/gocbcore.v7 v7.1.13 // indirect
-	gopkg.in/couchbaselabs/gocbconnstr.v1 v1.0.3 // indirect
-	gopkg.in/couchbaselabs/gojcbmock.v1 v1.0.3 // indirect
-	gopkg.in/couchbaselabs/jsonx.v1 v1.0.0 // indirect
-	gopkg.in/mgo.v2 v2.0.0-20190816093944-a6b53ec6cb22
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.2.8 // indirect
 )

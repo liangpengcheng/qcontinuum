@@ -1,4 +1,5 @@
-// +build !darwin
+//go:build !darwin && !linux && !windows
+// +build !darwin,!linux,!windows
 
 package network
 
@@ -7,7 +8,7 @@ import (
 	"syscall"
 )
 
-// 非macOS平台的空实现
+// 其他平台的空实现
 func setConnForFd(fd int, conn net.Conn) {
 	// 空实现
 }
