@@ -2,7 +2,7 @@ package network
 
 import (
 	"errors"
-	"io"
+
 	"sync/atomic"
 	"unsafe"
 
@@ -273,60 +273,3 @@ func (w *ZeroCopyMessageWriter) tryAsyncWrite() {
 
 // doWrite 执行实际写入 - 平台特定实现在message_unix.go和message_windows.go中
 
-// ReadHead read the message head (兼容旧接口)
-func ReadHead(src []byte) MessageHead {
-	head, _ := ReadHeadFromBuffer(src)
-	return head
-}
-
-// ReadFromConnect 读取消息 (兼容旧接口)
-func ReadFromConnect(conn io.Reader, length int) ([]byte, error) {
-	buffer := GetBuffer()
-	defer buffer.Release()
-
-	if buffer.Cap() < length {
-		buffer.Grow(length)
-	}
-
-	n, err := io.ReadFull(conn, buffer.Data()[:length])
-	if err != nil {
-		return nil, err
-	}
-
-	// 返回数据拷贝以保持兼容性
-	result := make([]byte, n)
-	copy(result, buffer.Data()[:n])
-	return result, nil
-}
-
-// GetMessageBuffer 把msg转成buffer (兼容旧接口)
-func GetMessageBuffer(msg proto.Message, id int32) ([]byte, error) {
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		return nil, err
-	}
-
-	buffer := GetBuffer()
-	defer buffer.Release()
-
-	totalLen := len(data) + 8
-	if buffer.Cap() < totalLen {
-		buffer.Grow(totalLen)
-	}
-
-	// 写入头部
-	head := MessageHead{
-		Length: int32(len(data)),
-		ID:     id,
-	}
-	WriteHeadToBuffer(buffer, head)
-
-	// 写入消息体
-	copy(buffer.Data()[8:], data)
-	buffer.SetLen(totalLen)
-
-	// 返回拷贝以保持兼容性
-	result := make([]byte, totalLen)
-	copy(result, buffer.Bytes())
-	return result, nil
-}
