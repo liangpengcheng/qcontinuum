@@ -98,67 +98,43 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 		reader := network.NewAsyncMessageReader()
 		defer reader.Release()
 
+		// 替换当前的NextReader方式
 		for {
-			_, wsConnection.IOReader, err = ws.NextReader()
+			messageType, messageData, err := ws.ReadMessage()
 			if err != nil {
 				base.Zap().Sugar().Errorf("websocket read error: %v", err)
 				return
 			}
 
-			// 使用缓冲区池读取数据
-			buffer := network.GetBuffer() // 从池中获取缓冲区
-
-			// 扩展缓冲区以适应可能的大消息
-			if buffer.Cap() < 64*1024 {
-				if err := buffer.Grow(64*1024 - buffer.Cap()); err != nil {
-					buffer.Release()
-					base.Zap().Sugar().Warnf("gin websocket buffer grow failed: %v", err)
-					return
-				}
-			}
-
-			// 读取WebSocket消息到缓冲区
-			n, err := wsConnection.IOReader.Read(buffer.Data())
-			if err != nil && err != io.EOF {
-				buffer.Release()
-				base.Zap().Sugar().Errorf("websocket read data error: %v", err)
-				return
-			}
-
-			if n == 0 {
-				buffer.Release()
-				continue
-			}
-
-			// 投递给零拷贝消息读取器
-			messages, err := reader.FeedData(buffer.Data()[:n])
-			buffer.Release() // 立即释放缓冲区
-
-			if err != nil {
-				base.Zap().Sugar().Warnf("message parse error: %v", err)
-				continue
-			}
-
-			// 处理解析出的零拷贝消息
-			for _, zcMsg := range messages {
-				msg := &network.Message{
-					Peer: peer,
-					Head: zcMsg.Head,
-					Body: zcMsg.GetBody(), // 零拷贝获取消息体
+			if messageType == websocket.BinaryMessage {
+				// 直接投递完整消息给FeedData
+				messages, err := reader.FeedData(messageData)
+				if err != nil {
+					base.Zap().Sugar().Warnf("message parse error: %v", err)
+					continue
 				}
 
-				if proc.ImmediateMode {
-					if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
-						cb(msg)
-					} else if proc.UnHandledHandler != nil {
-						proc.UnHandledHandler(msg)
+				// 处理解析出的零拷贝消息
+				for _, zcMsg := range messages {
+					msg := &network.Message{
+						Peer: peer,
+						Head: zcMsg.Head,
+						Body: zcMsg.GetBody(), // 零拷贝获取消息体
 					}
-				} else {
-					proc.MessageChan <- msg
-				}
 
-				// 释放零拷贝消息
-				zcMsg.Release()
+					if proc.ImmediateMode {
+						if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
+							cb(msg)
+						} else if proc.UnHandledHandler != nil {
+							proc.UnHandledHandler(msg)
+						}
+					} else {
+						proc.MessageChan <- msg
+					}
+
+					// 释放零拷贝消息
+					zcMsg.Release()
+				}
 			}
 		}
 	})
