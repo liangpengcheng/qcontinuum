@@ -205,8 +205,8 @@ func (peer *AsyncClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 		defer buffer.Release()
 
 		totalLen := len(data) + 8
-		if buffer.Cap() < totalLen {
-			buffer.Grow(totalLen)
+		if err := buffer.EnsureSpace(totalLen - buffer.Len()); err != nil {
+			return err
 		}
 
 		// 写入头部
@@ -214,9 +214,15 @@ func (peer *AsyncClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 			Length: int32(len(data)),
 			ID:     msgid,
 		}
-		WriteHeadToBuffer(buffer, head)
+		if err := WriteHeadToBuffer(buffer, head); err != nil {
+			return err
+		}
 
-		// 写入消息体
+		// 验证容量并写入消息体
+		if buffer.Len()+len(data) > buffer.Cap() {
+			return ErrInsufficientSize
+		}
+
 		copy(buffer.Data()[8:], data)
 		buffer.SetLen(totalLen)
 
@@ -247,8 +253,15 @@ func (peer *AsyncClientPeer) SendMessageBuffer(data []byte) error {
 	// 对于真实的TCP/UDP连接，使用异步写入器
 	// 创建写入请求
 	buffer := GetBuffer()
-	if buffer.Cap() < len(data) {
-		buffer.Grow(len(data))
+	if err := buffer.EnsureSpace(len(data)); err != nil {
+		buffer.Release()
+		return err
+	}
+
+	// 边界检查
+	if len(data) > buffer.Cap() {
+		buffer.Release()
+		return ErrInsufficientSize
 	}
 
 	copy(buffer.Data(), data)
@@ -279,14 +292,23 @@ func (peer *AsyncClientPeer) TransmitMsg(msg *Message) error {
 	buffer := GetBuffer()
 	totalLen := int(msg.Head.Length) + 8
 
-	if buffer.Cap() < totalLen {
-		buffer.Grow(totalLen)
+	if err := buffer.EnsureSpace(totalLen); err != nil {
+		buffer.Release()
+		return err
 	}
 
 	// 写入头部
-	WriteHeadToBuffer(buffer, msg.Head)
+	if err := WriteHeadToBuffer(buffer, msg.Head); err != nil {
+		buffer.Release()
+		return err
+	}
 
-	// 写入消息体
+	// 边界检查并写入消息体
+	if buffer.Len()+len(msg.Body) > buffer.Cap() {
+		buffer.Release()
+		return ErrInsufficientSize
+	}
+
 	copy(buffer.Data()[8:], msg.Body)
 	buffer.SetLen(totalLen)
 

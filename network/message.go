@@ -65,14 +65,22 @@ func ReadHeadFromBuffer(data []byte) (MessageHead, error) {
 }
 
 // WriteHeadToBuffer 零拷贝写入消息头到缓冲区
-func WriteHeadToBuffer(buffer *Buffer, head MessageHead) {
+func WriteHeadToBuffer(buffer *Buffer, head MessageHead) error {
 	if buffer.Cap()-buffer.Len() < 8 {
-		buffer.Grow(8)
+		if err := buffer.Grow(8); err != nil {
+			return err
+		}
+	}
+
+	// 再次验证容量（双重检查）
+	if buffer.Cap()-buffer.Len() < 8 {
+		return ErrInsufficientSize
 	}
 
 	// 直接内存写入
 	*(*MessageHead)(unsafe.Pointer(&buffer.Data()[buffer.Len()])) = head
 	buffer.SetLen(buffer.Len() + 8)
+	return nil
 }
 
 // AsyncMessageReader 异步消息读取器
@@ -95,9 +103,27 @@ func NewAsyncMessageReader() *AsyncMessageReader {
 func (r *AsyncMessageReader) FeedData(data []byte) ([]*ZeroCopyMessage, error) {
 	var messages []*ZeroCopyMessage
 
-	// 确保缓冲区足够大
+	// 检查输入数据大小
+	if len(data) == 0 {
+		return messages, nil
+	}
+
+	// 检查单次数据大小是否合理
+	if len(data) > maxMessageLength {
+		return nil, errors.New("input data too large")
+	}
+
+	// 确保缓冲区足够大 - 使用新的错误处理
+	requiredSpace := len(data)
+	if r.buffer.Len()+requiredSpace > r.buffer.Cap() {
+		if err := r.buffer.Grow(requiredSpace); err != nil {
+			return nil, err
+		}
+	}
+
+	// 验证容量足够（边界检查）
 	if r.buffer.Len()+len(data) > r.buffer.Cap() {
-		r.buffer.Grow(len(data))
+		return nil, ErrInsufficientSize
 	}
 
 	// 零拷贝追加数据
@@ -121,6 +147,11 @@ func (r *AsyncMessageReader) FeedData(data []byte) ([]*ZeroCopyMessage, error) {
 				r.currentHead = head
 				r.headerParsed = true
 				r.bytesNeeded = int(head.Length)
+
+				// 边界检查：确保移除操作安全
+				if r.buffer.Len() < 8 {
+					return nil, errors.New("buffer underflow")
+				}
 
 				// 移除已解析的头部
 				copy(r.buffer.Data(), r.buffer.Data()[8:r.buffer.Len()])
@@ -148,9 +179,21 @@ func (r *AsyncMessageReader) FeedData(data []byte) ([]*ZeroCopyMessage, error) {
 					// 创建新的缓冲区来存储剩余数据
 					remainingData := r.buffer.Len() - r.bytesNeeded
 					newBuffer := GetBuffer()
-					if newBuffer.Cap() < remainingData {
-						newBuffer.Grow(remainingData)
+
+					// 使用新的错误处理方式
+					if err := newBuffer.EnsureSpace(remainingData); err != nil {
+						// 清理已创建的消息
+						msg.Release()
+						return nil, err
 					}
+
+					// 边界检查
+					if remainingData > 0 && r.bytesNeeded+remainingData > r.buffer.Len() {
+						msg.Release()
+						newBuffer.Release()
+						return nil, errors.New("invalid buffer state")
+					}
+
 					copy(newBuffer.Data(), r.buffer.Data()[r.bytesNeeded:r.buffer.Len()])
 					newBuffer.SetLen(remainingData)
 
@@ -212,8 +255,9 @@ func (w *ZeroCopyMessageWriter) WriteMessage(fd int, msg proto.Message, msgID in
 	buffer := GetBuffer()
 	totalLen := len(data)
 
-	if buffer.Cap() < totalLen+8 {
-		buffer.Grow(totalLen + 8)
+	if err := buffer.EnsureSpace(totalLen + 8 - buffer.Len()); err != nil {
+		buffer.Release()
+		return err
 	}
 
 	// 写入头部
@@ -221,9 +265,17 @@ func (w *ZeroCopyMessageWriter) WriteMessage(fd int, msg proto.Message, msgID in
 		Length: int32(totalLen),
 		ID:     msgID,
 	}
-	WriteHeadToBuffer(buffer, head)
+	if err := WriteHeadToBuffer(buffer, head); err != nil {
+		buffer.Release()
+		return err
+	}
 
-	// 写入消息体
+	// 边界检查并写入消息体
+	if buffer.Len()+len(data) > buffer.Cap() {
+		buffer.Release()
+		return ErrInsufficientSize
+	}
+
 	copy(buffer.Data()[8:], data)
 	buffer.SetLen(totalLen + 8)
 
@@ -272,4 +324,3 @@ func (w *ZeroCopyMessageWriter) tryAsyncWrite() {
 }
 
 // doWrite 执行实际写入 - 平台特定实现在message_unix.go和message_windows.go中
-

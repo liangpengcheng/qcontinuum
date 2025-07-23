@@ -8,10 +8,10 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"unsafe"
 
 	"github.com/liangpengcheng/qcontinuum/base"
+	"golang.org/x/sys/windows"
 )
 
 // Windows使用IOCP (I/O Completion Ports)
@@ -25,7 +25,7 @@ const (
 
 // IOCPOverlapped IOCP重叠结构
 type IOCPOverlapped struct {
-	overlapped syscall.Overlapped
+	overlapped windows.Overlapped
 	opType     uint32
 	fd         int
 	buffer     *Buffer
@@ -34,7 +34,7 @@ type IOCPOverlapped struct {
 
 // IOCPReactor Windows IOCP反应器
 type IOCPReactor struct {
-	iocp     syscall.Handle
+	iocp     windows.Handle
 	handlers map[int]AsyncIOHandler
 	mu       sync.RWMutex
 	running  int32
@@ -46,7 +46,7 @@ type IOCPReactor struct {
 // NewEpollReactor 创建IOCP反应器（在Windows上使用IOCP）
 func NewEpollReactor() (*EpollReactor, error) {
 	// 创建IOCP句柄
-	iocp, err := syscall.CreateIoCompletionPort(syscall.InvalidHandle, 0, 0, 0)
+	iocp, err := windows.CreateIoCompletionPort(windows.InvalidHandle, 0, 0, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ func (r *EpollReactor) AddFd(fd int, events uint32, handler AsyncIOHandler) erro
 	}
 
 	// 将socket关联到IOCP
-	_, err = syscall.CreateIoCompletionPort(socketHandle, r.iocp, uint32(fd), 0)
+	_, err = windows.CreateIoCompletionPort(socketHandle, r.iocp, uintptr(fd), 0)
 	if err != nil {
 		return err
 	}
@@ -152,19 +152,24 @@ func (r *IOCPReactor) postRead(fd int, handler AsyncIOHandler) {
 
 	// 扩展缓冲区
 	if op.buffer.Cap() < 32*1024 {
-		op.buffer.Grow(32 * 1024)
+		if err := op.buffer.Grow(32*1024 - op.buffer.Cap()); err != nil {
+			op.buffer.Release()
+			r.opPool.Put(op)
+			handler.OnError(fd, err)
+			return
+		}
 	}
 
 	// 投递WSARecv操作
 	var bytesReceived uint32
 	var flags uint32
-	wsaBuf := syscall.WSABuf{
+	wsaBuf := windows.WSABuf{
 		Len: uint32(op.buffer.Cap()),
 		Buf: (*byte)(unsafe.Pointer(&op.buffer.Data()[0])),
 	}
 
-	err = syscall.WSARecv(socketHandle, &wsaBuf, 1, &bytesReceived, &flags, &op.overlapped, nil)
-	if err != nil && err != syscall.ERROR_IO_PENDING {
+	err = windows.WSARecv(socketHandle, &wsaBuf, 1, &bytesReceived, &flags, &op.overlapped, nil)
+	if err != nil && err != windows.ERROR_IO_PENDING {
 		// 立即失败
 		op.buffer.Release()
 		r.opPool.Put(op)
@@ -194,20 +199,25 @@ func (r *IOCPReactor) postWrite(fd int, handler AsyncIOHandler, data []byte) {
 
 	// 复制数据到缓冲区
 	if op.buffer.Cap() < len(data) {
-		op.buffer.Grow(len(data))
+		if err := op.buffer.Grow(len(data) - op.buffer.Cap()); err != nil {
+			op.buffer.Release()
+			r.opPool.Put(op)
+			handler.OnError(fd, err)
+			return
+		}
 	}
 	copy(op.buffer.Data(), data)
 	op.buffer.SetLen(len(data))
 
 	// 投递WSASend操作
 	var bytesSent uint32
-	wsaBuf := syscall.WSABuf{
+	wsaBuf := windows.WSABuf{
 		Len: uint32(op.buffer.Len()),
 		Buf: (*byte)(unsafe.Pointer(&op.buffer.Data()[0])),
 	}
 
-	err = syscall.WSASend(socketHandle, &wsaBuf, 1, &bytesSent, 0, &op.overlapped, nil)
-	if err != nil && err != syscall.ERROR_IO_PENDING {
+	err = windows.WSASend(socketHandle, &wsaBuf, 1, &bytesSent, 0, &op.overlapped, nil)
+	if err != nil && err != windows.ERROR_IO_PENDING {
 		// 立即失败
 		op.buffer.Release()
 		r.opPool.Put(op)
@@ -222,15 +232,15 @@ func (r *EpollReactor) Run() {
 
 	for atomic.LoadInt32(&r.running) == 1 {
 		var bytesTransferred uint32
-		var completionKey uint32
-		var overlapped *syscall.Overlapped
+		var completionKey uintptr
+		var overlapped *windows.Overlapped
 
 		// 等待I/O完成事件
-		err := syscall.GetQueuedCompletionStatus(r.iocp, &bytesTransferred, &completionKey, &overlapped, 100)
+		err := windows.GetQueuedCompletionStatus(windows.Handle(r.iocp), &bytesTransferred, &completionKey, &overlapped, 100)
 
 		if err != nil {
 			// 检查是否是超时错误
-			if errno, ok := err.(syscall.Errno); ok && errno == 258 { // WAIT_TIMEOUT
+			if errno, ok := err.(windows.Errno); ok && errno == 258 { // WAIT_TIMEOUT
 				continue // 超时，继续循环
 			}
 			base.Zap().Sugar().Errorf("IOCP error: %v", err)
@@ -305,31 +315,31 @@ func (r *EpollReactor) Stop() {
 	atomic.StoreInt32(&r.running, 0)
 
 	// 向IOCP投递一个退出信号
-	syscall.PostQueuedCompletionStatus(r.iocp, 0, 0, nil)
+	windows.PostQueuedCompletionStatus(windows.Handle(r.iocp), 0, 0, nil)
 }
 
 // Close 关闭IOCP reactor
 func (r *EpollReactor) Close() error {
 	r.Stop()
-	if r.iocp != syscall.InvalidHandle {
-		return syscall.CloseHandle(r.iocp)
+	if r.iocp != windows.InvalidHandle {
+		return windows.CloseHandle(r.iocp)
 	}
 	return nil
 }
 
 // getSocketHandle 从net.Conn获取socket句柄
-func getSocketHandle(conn net.Conn) (syscall.Handle, error) {
+func getSocketHandle(conn net.Conn) (windows.Handle, error) {
 	// 尝试获取底层的socket句柄
 	if tcpConn, ok := conn.(*net.TCPConn); ok {
 		file, err := tcpConn.File()
 		if err != nil {
-			return syscall.InvalidHandle, err
+			return windows.InvalidHandle, err
 		}
 		defer file.Close()
-		return syscall.Handle(file.Fd()), nil
+		return windows.Handle(file.Fd()), nil
 	}
 
-	return syscall.InvalidHandle, errors.New("unsupported connection type")
+	return windows.InvalidHandle, errors.New("unsupported connection type")
 }
 
 // Windows连接映射

@@ -48,6 +48,7 @@ Buffer生命周期管理指导：
 */
 
 import (
+	"errors"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -55,8 +56,14 @@ import (
 
 const (
 	defaultBufferSize = 8192
-	maxBufferSize     = 1024 * 1024
 	poolSize          = 1024
+)
+
+// 错误定义
+var (
+	ErrBufferTooLarge   = errors.New("buffer size exceeds maximum limit")
+	ErrInvalidBufferOp  = errors.New("invalid buffer operation")
+	ErrInsufficientSize = errors.New("insufficient buffer size")
 )
 
 // Buffer 零拷贝缓冲区
@@ -121,25 +128,92 @@ func (b *Buffer) Reset() {
 	atomic.StoreInt32(&b.refs, 1)
 }
 
-// Grow 扩展缓冲区
-func (b *Buffer) Grow(n int) {
+// Grow 扩展缓冲区 - 现在返回错误
+func (b *Buffer) Grow(n int) error {
+	if n < 0 {
+		return ErrInvalidBufferOp
+	}
+
 	if b.cap-b.len >= n {
-		return
+		return nil // 已经有足够容量
+	}
+
+	requiredSize := b.len + n
+	if requiredSize > maxMessageLength+8 {
+		return ErrBufferTooLarge
 	}
 
 	newCap := b.cap * 2
-	for newCap < b.len+n {
+	for newCap < requiredSize {
 		newCap *= 2
 	}
 
-	if newCap > maxBufferSize {
-		newCap = maxBufferSize
+	// 确保不超过最大限制，但必须满足最小需求
+	if newCap > maxMessageLength+8 {
+		newCap = maxMessageLength + 8
+	}
+
+	// 最后验证：确保新容量确实满足需求
+	if newCap < requiredSize {
+		return ErrBufferTooLarge
 	}
 
 	newData := make([]byte, newCap)
 	copy(newData, b.data[:b.len])
 	b.data = newData
 	b.cap = newCap
+
+	return nil
+}
+
+// EnsureSpace 确保缓冲区有足够空间，如果不够则尝试扩展
+func (b *Buffer) EnsureSpace(n int) error {
+	if b.cap-b.len >= n {
+		return nil
+	}
+	return b.Grow(n)
+}
+
+// CanHold 检查缓冲区是否能容纳指定大小的数据
+func (b *Buffer) CanHold(additionalSize int) bool {
+	return b.len+additionalSize <= maxMessageLength+8
+}
+
+// SafeCopy 安全地复制数据到缓冲区，包含边界检查
+func (b *Buffer) SafeCopy(data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
+
+	// 检查是否需要扩展
+	if err := b.EnsureSpace(len(data)); err != nil {
+		return err
+	}
+
+	// 进行边界检查
+	if b.len+len(data) > b.cap {
+		return ErrInsufficientSize
+	}
+
+	// 安全复制
+	copy(b.data[b.len:], data)
+	b.len += len(data)
+
+	return nil
+}
+
+// SafeAppend 安全地追加数据，包含完整的验证
+func (b *Buffer) SafeAppend(data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
+
+	// 检查总大小限制
+	if !b.CanHold(len(data)) {
+		return ErrBufferTooLarge
+	}
+
+	return b.SafeCopy(data)
 }
 
 // BufferPool 无锁缓冲区池
@@ -189,7 +263,7 @@ func putBuffer(buf *Buffer) {
 	if buf == nil {
 		return
 	}
-	if buf.cap > maxBufferSize {
+	if buf.cap > maxMessageLength+8 {
 		return // 丢弃过大的缓冲区
 	}
 	atomic.AddInt64(&globalBufferPool.freeCount, 1)

@@ -28,7 +28,7 @@ func NewAsyncKCPServer(host string) (*AsyncKCPServer, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// 默认DSCP
 	if err := lis.SetDSCP(0); err != nil {
 		lis.Close()
@@ -42,14 +42,14 @@ func NewAsyncKCPServer(host string) (*AsyncKCPServer, error) {
 		lis.Close()
 		return nil, err
 	}
-	
+
 	// 创建reactor池
 	reactorPool, err := network.NewIOReactorPool(0)
 	if err != nil {
 		lis.Close()
 		return nil, err
 	}
-	
+
 	return &AsyncKCPServer{
 		listener:    lis,
 		reactorPool: reactorPool,
@@ -64,10 +64,10 @@ func (s *AsyncKCPServer) SetProcessor(proc *network.Processor) {
 // StartAsync 启动异步KCP服务器
 func (s *AsyncKCPServer) StartAsync() error {
 	atomic.StoreInt32(&s.running, 1)
-	
+
 	// KCP的accept循环在goroutine中运行
 	go s.acceptLoop()
-	
+
 	return nil
 }
 
@@ -88,42 +88,42 @@ func (s *AsyncKCPServer) acceptOne() error {
 	if err != nil {
 		return err
 	}
-	
+
 	base.Zap().Sugar().Infof("kcp remote address: %s", conn.RemoteAddr().String())
 	setupKcp(conn)
-	
+
 	// 将KCP连接包装为标准net.Conn
 	netConn := &kcpConnWrapper{conn: conn}
-	
+
 	// 选择一个reactor处理这个连接
 	reactor := s.reactorPool.GetReactor()
-	
+
 	// 创建异步peer
 	peer, err := network.NewAsyncClientPeer(netConn, s.processor, reactor)
 	if err != nil {
 		conn.Close()
 		return err
 	}
-	
+
 	// 由于KCP是UDP连接，需要特殊处理文件描述符
 	// 这里我们使用一个特殊的处理方式
 	go s.handleKCPConnection(peer, conn)
-	
+
 	// 发送连接事件
 	event := &network.Event{
 		ID:   network.AddEvent,
 		Peer: &network.ClientPeer{AsyncClientPeer: peer},
 	}
-	
+
 	select {
 	case s.processor.EventChan <- event:
 	default:
 		base.Zap().Sugar().Warnf("event queue full, dropping add event")
 	}
-	
+
 	atomic.AddUint64(&s.acceptCount, 1)
 	atomic.AddUint64(&s.connCount, 1)
-	
+
 	return nil
 }
 
@@ -134,41 +134,45 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *network.AsyncClientPeer, conn
 		conn.Close()
 		atomic.AddUint64(&s.connCount, ^uint64(0)) // 原子递减
 	}()
-	
+
 	// KCP连接的读取循环，使用零拷贝缓冲区池
 	reader := network.NewAsyncMessageReader()
 	defer reader.Release()
-	
+
 	for peer.GetState() == network.PeerStateConnected {
 		// 使用缓冲区池
 		buffer := network.GetBuffer()
-		
+
 		// 扩展缓冲区以适应KCP数据包
 		if buffer.Cap() < 32*1024 {
-			buffer.Grow(32 * 1024)
+			if err := buffer.Grow(32*1024 - buffer.Cap()); err != nil {
+				buffer.Release()
+				base.Zap().Sugar().Warnf("kcp buffer grow failed: %v", err)
+				break
+			}
 		}
-		
+
 		n, err := conn.Read(buffer.Data())
 		if err != nil {
 			buffer.Release()
 			base.Zap().Sugar().Debugf("kcp read error: %v", err)
 			break
 		}
-		
+
 		if n == 0 {
 			buffer.Release()
 			continue
 		}
-		
+
 		// 处理接收到的数据
 		messages, err := reader.FeedData(buffer.Data()[:n])
 		buffer.Release() // 立即释放缓冲区
-		
+
 		if err != nil {
 			base.Zap().Sugar().Warnf("kcp message parse error: %v", err)
 			break
 		}
-		
+
 		// 处理解析出的消息
 		for _, zcMsg := range messages {
 			msg := &network.Message{
@@ -176,7 +180,7 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *network.AsyncClientPeer, conn
 				Head: zcMsg.Head,
 				Body: zcMsg.GetBody(),
 			}
-			
+
 			if s.processor.ImmediateMode {
 				if cb, ok := s.processor.CallbackMap[msg.Head.ID]; ok {
 					cb(msg)
@@ -190,7 +194,7 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *network.AsyncClientPeer, conn
 					base.Zap().Sugar().Warnf("message queue full, dropping message")
 				}
 			}
-			
+
 			zcMsg.Release()
 		}
 	}
@@ -199,11 +203,11 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *network.AsyncClientPeer, conn
 // Stop 停止KCP服务器
 func (s *AsyncKCPServer) Stop() {
 	atomic.StoreInt32(&s.running, 0)
-	
+
 	if s.listener != nil {
 		s.listener.Close()
 	}
-	
+
 	if s.reactorPool != nil {
 		s.reactorPool.Close()
 	}
@@ -272,7 +276,7 @@ func NewKCPServer(host string) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &Server{
 		AsyncKCPServer: asyncServer,
 		Listener:       asyncServer.listener,
@@ -282,14 +286,14 @@ func NewKCPServer(host string) (*Server, error) {
 // BlockAccept 阻塞收消息 (兼容旧接口)
 func (s *Server) BlockAccept(proc *network.Processor) {
 	s.SetProcessor(proc)
-	
+
 	if err := s.StartAsync(); err != nil {
 		base.Zap().Sugar().Errorf("start async kcp server error: %v", err)
 		return
 	}
-	
+
 	base.Zap().Sugar().Infof("kcp server started in async mode")
-	
+
 	// 保持运行直到停止
 	for atomic.LoadInt32(&s.running) == 1 {
 		select {
@@ -300,20 +304,20 @@ func (s *Server) BlockAccept(proc *network.Processor) {
 			//time.Sleep(10 * time.Millisecond)
 		}
 	}
-	
+
 	base.Zap().Sugar().Infof("kcp block accept exited")
 }
 
 // BlockAcceptOne 接受一个连接 (兼容旧接口)
 func (s *Server) BlockAcceptOne(proc *network.Processor) error {
 	s.SetProcessor(proc)
-	
+
 	if atomic.LoadInt32(&s.running) == 0 {
 		if err := s.StartAsync(); err != nil {
 			return err
 		}
 	}
-	
+
 	// 等待连接计数增加
 	initialCount := atomic.LoadUint64(&s.connCount)
 	for atomic.LoadUint64(&s.connCount) == initialCount {
@@ -323,7 +327,7 @@ func (s *Server) BlockAcceptOne(proc *network.Processor) error {
 		// 短暂等待
 		//time.Sleep(1 * time.Millisecond)
 	}
-	
+
 	return nil
 }
 

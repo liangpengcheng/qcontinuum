@@ -56,13 +56,13 @@ func NewWebSocket(path string, proc *Processor) {
 	http.Handle(path, websocket.Handler(
 		func(ws *websocket.Conn) {
 			base.Zap().Sugar().Infof("new webclient connected :%s", ws.RemoteAddr().String())
-			
+
 			// 创建WebSocket连接的包装器
 			wsPeer := &WebSocketPeer{Connection: ws}
-			
+
 			// 为WebSocket创建专用的peer
 			peer := NewWebSocketClientPeer(wsPeer, proc)
-			
+
 			event := &Event{
 				ID:   AddEvent,
 				Peer: peer,
@@ -75,20 +75,24 @@ func NewWebSocket(path string, proc *Processor) {
 				}
 				proc.EventChan <- leaveEvent
 			}()
-			
+
 			// 使用零拷贝消息读取器
 			reader := NewAsyncMessageReader()
 			defer reader.Release()
-			
+
 			for {
 				// 使用缓冲区池读取数据
 				buffer := GetBuffer()
-				
+
 				// 扩展缓冲区以适应可能的大消息
 				if buffer.Cap() < 64*1024 {
-					buffer.Grow(64 * 1024)
+					if err := buffer.Grow(64*1024 - buffer.Cap()); err != nil {
+						buffer.Release()
+						base.Zap().Sugar().Warnf("websocket buffer grow failed: %v", err)
+						return
+					}
 				}
-				
+
 				// 读取WebSocket消息到缓冲区
 				n, err := wsPeer.Read(buffer.Data())
 				if err != nil {
@@ -96,21 +100,21 @@ func NewWebSocket(path string, proc *Processor) {
 					base.Zap().Sugar().Infof("websocket read error: %v", err)
 					return
 				}
-				
+
 				if n == 0 {
 					buffer.Release()
 					continue
 				}
-				
+
 				// 投递给零拷贝消息读取器
 				messages, err := reader.FeedData(buffer.Data()[:n])
 				buffer.Release() // 立即释放缓冲区
-				
+
 				if err != nil {
 					base.Zap().Sugar().Warnf("message parse error: %v", err)
 					continue
 				}
-				
+
 				// 处理解析出的零拷贝消息
 				for _, zcMsg := range messages {
 					msg := &Message{
@@ -118,7 +122,7 @@ func NewWebSocket(path string, proc *Processor) {
 						Head: zcMsg.Head,
 						Body: zcMsg.GetBody(), // 零拷贝获取消息体
 					}
-					
+
 					if proc.ImmediateMode {
 						if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
 							cb(msg)
@@ -128,7 +132,7 @@ func NewWebSocket(path string, proc *Processor) {
 					} else {
 						proc.MessageChan <- msg
 					}
-					
+
 					// 释放零拷贝消息
 					zcMsg.Release()
 				}

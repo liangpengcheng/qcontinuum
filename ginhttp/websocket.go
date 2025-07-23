@@ -110,7 +110,11 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 
 			// 扩展缓冲区以适应可能的大消息
 			if buffer.Cap() < 64*1024 {
-				buffer.Grow(64 * 1024)
+				if err := buffer.Grow(64*1024 - buffer.Cap()); err != nil {
+					buffer.Release()
+					base.Zap().Sugar().Warnf("gin websocket buffer grow failed: %v", err)
+					return
+				}
 			}
 
 			// 读取WebSocket消息到缓冲区

@@ -28,6 +28,7 @@ require (
 	github.com/xtaci/lossyconn v0.0.0-20190602105132-8df528c0c9ae // indirect
 	go.uber.org/zap v1.27.0
 	golang.org/x/net v0.10.0
+	golang.org/x/sys v0.8.0
 	gopkg.in/check.v1 v1.0.0-20201130134442-10cb98267c6c // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.2.8 // indirect
