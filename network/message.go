@@ -245,15 +245,27 @@ func NewZeroCopyMessageWriter() *ZeroCopyMessageWriter {
 
 // WriteMessage 异步写入消息
 func (w *ZeroCopyMessageWriter) WriteMessage(fd int, msg proto.Message, msgID int32) error {
-	// 序列化消息
-	data, err := proto.Marshal(msg)
+	// 兼容旧接口：明确使用protobuf进行序列化
+	return w.WriteMessageWithCodec(fd, msg, msgID, ProtobufCodec{})
+}
+
+// WriteMessageWithCodec 使用指定Codec序列化并写入
+func (w *ZeroCopyMessageWriter) WriteMessageWithCodec(fd int, v interface{}, msgID int32, codec Codec) error {
+	if codec == nil {
+		codec = DefaultCodec()
+	}
+	data, err := codec.Marshal(v)
 	if err != nil {
 		return err
 	}
+	return w.WriteBody(fd, data, msgID)
+}
 
+// WriteBody 直接写入已编码的消息体（零拷贝队列）
+func (w *ZeroCopyMessageWriter) WriteBody(fd int, body []byte, msgID int32) error {
 	// 创建带头部的完整消息
 	buffer := GetBuffer()
-	totalLen := len(data)
+	totalLen := len(body)
 
 	if err := buffer.EnsureSpace(totalLen + 8 - buffer.Len()); err != nil {
 		buffer.Release()
@@ -271,12 +283,12 @@ func (w *ZeroCopyMessageWriter) WriteMessage(fd int, msg proto.Message, msgID in
 	}
 
 	// 边界检查并写入消息体
-	if buffer.Len()+len(data) > buffer.Cap() {
+	if buffer.Len()+len(body) > buffer.Cap() {
 		buffer.Release()
 		return ErrInsufficientSize
 	}
 
-	copy(buffer.Data()[8:], data)
+	copy(buffer.Data()[8:], body)
 	buffer.SetLen(totalLen + 8)
 
 	// 加入写入队列

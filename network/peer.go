@@ -35,6 +35,9 @@ type AsyncClientPeer struct {
 	writer  *ZeroCopyMessageWriter
 	reactor *EpollReactor
 
+	// 可插拔编解码器（默认protobuf），仅用于新的通用接口
+	codec Codec
+
 	// 统计信息
 	bytesRead    uint64
 	bytesWritten uint64
@@ -53,6 +56,7 @@ func NewWebSocketClientPeer(conn net.Conn, proc *Processor) *ClientPeer {
 		reader:     NewAsyncMessageReader(),
 		writer:     NewZeroCopyMessageWriter(),
 		reactor:    nil, // WebSocket不使用reactor
+		codec:      DefaultCodec(),
 	}
 
 	return &ClientPeer{AsyncClientPeer: peer}
@@ -92,6 +96,7 @@ func NewAsyncClientPeer(conn net.Conn, proc *Processor, reactor *EpollReactor) (
 		writer:     NewZeroCopyMessageWriter(),
 		reactor:    reactor,
 		lastActive: time.Now().Unix(),
+		codec:      DefaultCodec(),
 	}
 
 	atomic.StoreInt32(&peer.state, int32(PeerStateConnected))
@@ -194,42 +199,8 @@ func (peer *AsyncClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 
 	// 检查是否为WebSocket连接（fd = -1表示虚拟连接）
 	if peer.fd == -1 {
-		// 对于WebSocket连接，直接序列化并发送
-		data, err := proto.Marshal(msg)
-		if err != nil {
-			return err
-		}
-
-		// 创建带头部的完整消息
-		buffer := GetBuffer()
-		defer buffer.Release()
-
-		totalLen := len(data) + 8
-		if err := buffer.EnsureSpace(totalLen - buffer.Len()); err != nil {
-			return err
-		}
-
-		// 写入头部
-		head := MessageHead{
-			Length: int32(len(data)),
-			ID:     msgid,
-		}
-		if err := WriteHeadToBuffer(buffer, head); err != nil {
-			return err
-		}
-
-		// 验证容量并写入消息体
-		if buffer.Len()+len(data) > buffer.Cap() {
-			return ErrInsufficientSize
-		}
-
-		copy(buffer.Data()[8:], data)
-		buffer.SetLen(totalLen)
-
-		// 直接通过连接发送
-		_, err = peer.Connection.Write(buffer.Bytes())
-		atomic.AddUint64(&peer.bytesWritten, uint64(totalLen))
-		return err
+		// 对于WebSocket连接，使用protobuf兼容的旧接口行为
+		return peer.SendWithCodec(msg, msgid, ProtobufCodec{})
 	}
 
 	// 对于真实的TCP/UDP连接，使用异步写入器
@@ -336,6 +307,63 @@ func (peer *AsyncClientPeer) TransmitMsg(msg *Message) error {
 	peer.writer.tryAsyncWrite()
 	// 注意：buffer的所有权已经转移到writeRequest，会在doWrite中释放
 	return nil
+}
+
+// ============ 新增的通用接口（保持向后兼容）============
+
+// SetCodec 设置该peer默认使用的Codec。为nil时回退到默认Codec。
+func (peer *AsyncClientPeer) SetCodec(c Codec) {
+	if c == nil {
+		peer.codec = DefaultCodec()
+		return
+	}
+	peer.codec = c
+}
+
+// Send 使用peer的默认Codec进行序列化并发送
+func (peer *AsyncClientPeer) Send(v interface{}, msgid int32) error {
+	return peer.SendWithCodec(v, msgid, peer.codec)
+}
+
+// SendWithCodec 使用指定Codec进行序列化并发送
+func (peer *AsyncClientPeer) SendWithCodec(v interface{}, msgid int32, codec Codec) error {
+	if peer.GetState() != PeerStateConnected {
+		return errors.New("connection is not connected")
+	}
+	if codec == nil {
+		codec = DefaultCodec()
+	}
+	body, err := codec.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	// WebSocket直接写入，其他则入队
+	if peer.fd == -1 {
+		buffer := GetBuffer()
+		defer buffer.Release()
+
+		totalLen := len(body) + 8
+		if err := buffer.EnsureSpace(totalLen - buffer.Len()); err != nil {
+			return err
+		}
+
+		head := MessageHead{Length: int32(len(body)), ID: msgid}
+		if err := WriteHeadToBuffer(buffer, head); err != nil {
+			return err
+		}
+		if buffer.Len()+len(body) > buffer.Cap() {
+			return ErrInsufficientSize
+		}
+		copy(buffer.Data()[8:], body)
+		buffer.SetLen(totalLen)
+
+		_, err = peer.Connection.Write(buffer.Bytes())
+		atomic.AddUint64(&peer.bytesWritten, uint64(totalLen))
+		return err
+	}
+
+	return peer.writer.WriteBody(peer.fd, body, msgid)
 }
 
 // StartAsyncIO 开始异步I/O处理
