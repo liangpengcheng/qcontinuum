@@ -67,13 +67,23 @@ func NewWebSocket(path string, proc *Processor) {
 				ID:   AddEvent,
 				Peer: peer,
 			}
-			proc.EventChan <- event
+			// 使用select避免channel满时阻塞
+			select {
+			case proc.EventChan <- event:
+			default:
+				base.Zap().Sugar().Warnf("websocket event queue full, dropping add event")
+			}
 			defer func() {
 				leaveEvent := &Event{
 					ID:   RemoveEvent,
 					Peer: peer,
 				}
-				proc.EventChan <- leaveEvent
+				// 使用select避免channel满时阻塞
+				select {
+				case proc.EventChan <- leaveEvent:
+				default:
+					base.Zap().Sugar().Warnf("websocket event queue full, dropping remove event")
+				}
 			}()
 
 			// 使用零拷贝消息读取器
@@ -117,10 +127,24 @@ func NewWebSocket(path string, proc *Processor) {
 
 				// 处理解析出的零拷贝消息
 				for _, zcMsg := range messages {
+					// 获取消息体数据
+					body := zcMsg.GetBody()
+
+					// 根据处理模式决定是否复制消息体
+					var msgBody []byte
+					if proc.ImmediateMode {
+						// 同步处理模式：可以安全使用零拷贝
+						msgBody = body
+					} else {
+						// 异步处理模式：需要复制消息体
+						msgBody = make([]byte, len(body))
+						copy(msgBody, body)
+					}
+
 					msg := &Message{
 						Peer: peer,
 						Head: zcMsg.Head,
-						Body: zcMsg.GetBody(), // 零拷贝获取消息体
+						Body: msgBody,
 					}
 
 					if proc.ImmediateMode {
@@ -130,7 +154,12 @@ func NewWebSocket(path string, proc *Processor) {
 							proc.UnHandledHandler(msg)
 						}
 					} else {
-						proc.MessageChan <- msg
+						// 使用select避免channel满时阻塞
+						select {
+						case proc.MessageChan <- msg:
+						default:
+							base.Zap().Sugar().Warnf("websocket message queue full, dropping message")
+						}
 					}
 
 					// 释放零拷贝消息

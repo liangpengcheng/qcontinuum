@@ -3,7 +3,9 @@ package network
 import (
 	"errors"
 	"net"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/liangpengcheng/qcontinuum/base"
 )
@@ -17,6 +19,8 @@ type AsyncTCPServer struct {
 	running      int32
 	acceptCount  uint64
 	connCount    uint64
+	wg           sync.WaitGroup  // 跟踪活跃连接
+	shutdown     chan struct{}   // 关闭信号
 }
 
 // NewAsyncTCP4Server 创建异步TCP服务器
@@ -35,7 +39,8 @@ func NewAsyncTCP4Server(bindAddress string) (*AsyncTCPServer, error) {
 	var fd int
 	if file, err := listener.File(); err == nil {
 		fd = int(file.Fd())
-		file.Close() // 关闭文件句柄，但保留fd
+		// 注意：不要在这里调用 file.Close()，因为它会关闭我们刚刚获取的 fd。
+		// 这个 fd 将通过监听器和 reactor 的生命周期来管理。
 		
 		// 设置非阻塞（仅在支持的平台上）
 		if err := setNonblock(fd); err != nil {
@@ -58,6 +63,7 @@ func NewAsyncTCP4Server(bindAddress string) (*AsyncTCPServer, error) {
 		listener:    listener,
 		reactorPool: reactorPool,
 		fd:          fd,
+		shutdown:    make(chan struct{}),
 	}
 	
 	return server, nil
@@ -87,12 +93,57 @@ func (s *AsyncTCPServer) StartAsync() error {
 func (s *AsyncTCPServer) Stop() {
 	atomic.StoreInt32(&s.running, 0)
 	
+	// 发送关闭信号
+	close(s.shutdown)
+	
 	if s.listener != nil {
 		s.listener.Close()
 	}
 	
 	if s.reactorPool != nil {
 		s.reactorPool.Close()
+	}
+}
+
+// GracefulStop 优雅停止服务器，等待所有连接处理完成
+func (s *AsyncTCPServer) GracefulStop(timeout time.Duration) error {
+	atomic.StoreInt32(&s.running, 0)
+	
+	// 发送关闭信号
+	close(s.shutdown)
+	
+	if s.listener != nil {
+		s.listener.Close()
+	}
+	
+	// 等待所有连接处理完成
+	done := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(done)
+	}()
+	
+	select {
+	case <-done:
+		base.Zap().Sugar().Infof("all connections closed gracefully")
+	case <-time.After(timeout):
+		base.Zap().Sugar().Warnf("graceful shutdown timeout after %v", timeout)
+	}
+	
+	if s.reactorPool != nil {
+		s.reactorPool.Close()
+	}
+	
+	return nil
+}
+
+// IsShutdown 检查服务器是否正在关闭
+func (s *AsyncTCPServer) IsShutdown() bool {
+	select {
+	case <-s.shutdown:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -133,6 +184,9 @@ func (s *AsyncTCPServer) OnRead(fd int, data []byte) error {
 			base.Zap().Sugar().Errorf("start async IO error: %v", err)
 			continue
 		}
+		
+		// 跟踪活跃连接
+		s.wg.Add(1)
 		
 		// 发送连接事件
 		event := &Event{

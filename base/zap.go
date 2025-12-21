@@ -17,7 +17,8 @@ func Zap() *zap.Logger {
 func init_zap() {
 	// 日志目录路径通过命令行参数传递
 	logDir := flag.String("logpath", "", "log directory path")
-	flag.Parse()
+	// flag.Parse() // 移除 init 中的 flag.Parse()，由 main 函数统一调用，避免冲突
+
 
 	if logDir != nil && *logDir != "" {
 		// 配置日志编码器

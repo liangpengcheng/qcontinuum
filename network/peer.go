@@ -30,12 +30,13 @@ const (
 // AsyncClientPeer 异步客户端peer
 type AsyncClientPeer struct {
 	Connection   net.Conn
-	fd           int
+	FD           int
 	Flag         int32
 	ID           int64
 	state        int32          // PeerState
 	redirectProc unsafe.Pointer // *Processor, 使用unsafe.Pointer实现无锁
-	Proc         *Processor
+	Proc         *Processor     // 保持兼容性，但应通过原子操作访问
+	procPtr      unsafe.Pointer // *Processor, 原子访问的处理器指针
 
 	// 异步I/O组件
 	reader  *AsyncMessageReader
@@ -55,8 +56,9 @@ type AsyncClientPeer struct {
 func NewWebSocketClientPeer(conn net.Conn, proc *Processor) *ClientPeer {
 	peer := &AsyncClientPeer{
 		Connection: conn,
-		fd:         -1, // WebSocket使用虚拟fd
+		FD:         -1, // WebSocket使用虚拟fd
 		Proc:       proc,
+		procPtr:    unsafe.Pointer(proc), // 原子访问的处理器指针
 		ID:         0,
 		state:      int32(PeerStateConnected),
 		lastActive: time.Now().Unix(),
@@ -80,7 +82,7 @@ func NewAsyncClientPeer(conn net.Conn, proc *Processor, reactor *EpollReactor) (
 			return nil, fileErr
 		}
 		fd = int(file.Fd())
-		file.Close() // 关闭文件句柄，但保留fd
+		// 注意：不要调用 file.Close()，否则 FD 会失效
 	} else {
 		// 对于非TCP连接，使用虚拟fd
 		fd = -1
@@ -97,8 +99,9 @@ func NewAsyncClientPeer(conn net.Conn, proc *Processor, reactor *EpollReactor) (
 
 	peer := &AsyncClientPeer{
 		Connection: conn,
-		fd:         fd,
+		FD:         fd,
 		Proc:       proc,
+		procPtr:    unsafe.Pointer(proc), // 原子访问的处理器指针
 		reader:     NewAsyncMessageReader(),
 		writer:     NewZeroCopyMessageWriter(),
 		reactor:    reactor,
@@ -142,13 +145,13 @@ func (peer *AsyncClientPeer) Close() {
 	}
 
 	// 从reactor移除
-	if peer.reactor != nil && peer.fd != -1 {
-		peer.reactor.RemoveFd(peer.fd)
+	if peer.reactor != nil && peer.FD != -1 {
+		peer.reactor.RemoveFd(peer.FD)
 	}
 
 	// 清理连接映射（macOS）
-	if peer.fd != -1 {
-		removeConnFromFd(peer.fd)
+	if peer.FD != -1 {
+		removeConnFromFd(peer.FD)
 	}
 
 	// 关闭连接
@@ -219,8 +222,12 @@ func (peer *AsyncClientPeer) pushToWriteQueueWithTimeout(req *writeRequest) bool
 	}
 
 	// 超时失败
-	base.Zap().Sugar().Errorf("send timeout after %v, queue_size=%d, remote=%v",
-		sendTimeout, peer.writer.writeQueue.Size(), peer.Connection.RemoteAddr())
+	remoteAddr := "unknown"
+	if peer.Connection != nil {
+		remoteAddr = peer.Connection.RemoteAddr().String()
+	}
+	base.Zap().Sugar().Errorf("send timeout after %v, queue_size=%d, remote=%s",
+		sendTimeout, peer.writer.writeQueue.Size(), remoteAddr)
 
 	// 自动断开连接
 	go peer.Close()
@@ -233,16 +240,22 @@ func (peer *AsyncClientPeer) Redirect(proc *Processor) {
 	atomic.StorePointer(&peer.redirectProc, unsafe.Pointer(proc))
 }
 
-// getProcessor 获取当前处理器
+// getProcessor 获取当前处理器（完全原子化）
 func (peer *AsyncClientPeer) getProcessor() *Processor {
+	// 检查是否有重定向的处理器
 	if redirectProc := atomic.LoadPointer(&peer.redirectProc); redirectProc != nil {
 		newProc := (*Processor)(redirectProc)
-		// 原子性地清除redirectProc并更新Proc
+		// 原子性地清除redirectProc并更新procPtr
 		if atomic.CompareAndSwapPointer(&peer.redirectProc, redirectProc, nil) {
-			peer.Proc = newProc
+			atomic.StorePointer(&peer.procPtr, redirectProc)
+			peer.Proc = newProc // 保持兼容性
 		}
 	}
-	return peer.Proc
+	// 从procPtr原子读取
+	if procPtr := atomic.LoadPointer(&peer.procPtr); procPtr != nil {
+		return (*Processor)(procPtr)
+	}
+	return peer.Proc // 回退到非原子字段（兼容性）
 }
 
 // SendMessage 发送消息（异步，带超时保护）
@@ -252,7 +265,7 @@ func (peer *AsyncClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 	}
 
 	// 检查是否为WebSocket连接（fd = -1表示虚拟连接）
-	if peer.fd == -1 {
+	if peer.FD == -1 {
 		// 对于WebSocket连接，使用protobuf兼容的旧接口行为
 		return peer.SendWithCodec(msg, msgid, ProtobufCodec{})
 	}
@@ -294,7 +307,7 @@ func (peer *AsyncClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 
 	// 创建写入请求
 	writeReq := &writeRequest{
-		fd:     peer.fd,
+		fd:     peer.FD,
 		buffer: buffer,
 	}
 
@@ -315,7 +328,7 @@ func (peer *AsyncClientPeer) SendMessageBuffer(data []byte) error {
 	}
 
 	// 检查是否为WebSocket连接（fd = -1表示虚拟连接）
-	if peer.fd == -1 {
+	if peer.FD == -1 {
 		// 对于WebSocket连接，直接发送
 		_, err := peer.Connection.Write(data)
 		atomic.AddUint64(&peer.bytesWritten, uint64(len(data)))
@@ -340,7 +353,7 @@ func (peer *AsyncClientPeer) SendMessageBuffer(data []byte) error {
 	buffer.SetLen(len(data))
 
 	writeReq := &writeRequest{
-		fd:     peer.fd,
+		fd:     peer.FD,
 		buffer: buffer,
 	}
 
@@ -386,7 +399,7 @@ func (peer *AsyncClientPeer) TransmitMsg(msg *Message) error {
 	buffer.SetLen(totalLen)
 
 	// 检查是否为WebSocket连接（fd = -1表示虚拟连接）
-	if peer.fd == -1 {
+	if peer.FD == -1 {
 		// 对于WebSocket连接，直接发送
 		_, err := peer.Connection.Write(buffer.Bytes())
 		atomic.AddUint64(&peer.bytesWritten, uint64(totalLen))
@@ -397,7 +410,7 @@ func (peer *AsyncClientPeer) TransmitMsg(msg *Message) error {
 	// 对于真实的TCP/UDP连接，使用异步写入器
 	// 创建写入请求
 	writeReq := &writeRequest{
-		fd:     peer.fd,
+		fd:     peer.FD,
 		buffer: buffer,
 	}
 
@@ -463,7 +476,7 @@ func (peer *AsyncClientPeer) SendWithCodec(v interface{}, msgid int32, codec Cod
 	buffer.SetLen(totalLen)
 
 	// WebSocket直接写入，其他则入队
-	if peer.fd == -1 {
+	if peer.FD == -1 {
 		_, err = peer.Connection.Write(buffer.Bytes())
 		atomic.AddUint64(&peer.bytesWritten, uint64(totalLen))
 		buffer.Release()
@@ -472,7 +485,7 @@ func (peer *AsyncClientPeer) SendWithCodec(v interface{}, msgid int32, codec Cod
 
 	// 对于真实的TCP/UDP连接，使用带超时的推送
 	writeReq := &writeRequest{
-		fd:     peer.fd,
+		fd:     peer.FD,
 		buffer: buffer,
 	}
 
@@ -488,7 +501,7 @@ func (peer *AsyncClientPeer) SendWithCodec(v interface{}, msgid int32, codec Cod
 // StartAsyncIO 开始异步I/O处理
 func (peer *AsyncClientPeer) StartAsyncIO() error {
 	// 将peer注册到reactor
-	return peer.reactor.AddFd(peer.fd, EpollIn|EpollOut|EpollET, peer)
+	return peer.reactor.AddFd(peer.FD, EpollIn|EpollOut|EpollET, peer)
 }
 
 // OnRead 实现AsyncIOHandler接口 - 处理读事件
@@ -511,11 +524,26 @@ func (peer *AsyncClientPeer) OnRead(fd int, data []byte) error {
 	// 处理解析出的消息
 	proc := peer.getProcessor()
 	for _, zcMsg := range messages {
+		// 获取消息体数据
+		body := zcMsg.GetBody()
+
+		// 在非ImmediateMode下，消息会被发送到channel异步处理
+		// 此时需要复制消息体，因为zcMsg.Release()后原数据可能被覆盖
+		var msgBody []byte
+		if proc.ImmediateMode {
+			// 同步处理模式：可以安全使用零拷贝
+			msgBody = body
+		} else {
+			// 异步处理模式：需要复制消息体
+			msgBody = make([]byte, len(body))
+			copy(msgBody, body)
+		}
+
 		// 转换为兼容的Message格式
 		msg := &Message{
 			Peer: &ClientPeer{AsyncClientPeer: peer},
 			Head: zcMsg.Head,
-			Body: zcMsg.GetBody(),
+			Body: msgBody,
 		}
 
 		// 处理消息

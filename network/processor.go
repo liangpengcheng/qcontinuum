@@ -134,43 +134,70 @@ func (p *Processor) send() {
 }
 */
 // StartProcess 开始处理信息
-// 只有调用了这个借口，处理器才会处理实际的信息，以及实际发送消息
+// 只有调用了这个接口，处理器才会处理实际的信息，以及实际发送消息
 func (p *Processor) StartProcess() {
-	defer func() {
-		if err := recover(); err != nil {
-			base.Zap().Sugar().Errorf("%v", err)
-			base.Zap().Sugar().Errorf("stacks%s", debug.Stack())
+	base.Zap().Sugar().Infof("processor is starting")
+	tick := time.Tick(p.loopTime)
 
+	for {
+		// 使用safeProcessOnce处理单次循环，确保panic不会导致退出
+		shouldExit := p.safeProcessOnce(tick)
+		if shouldExit {
+			return
+		}
+	}
+}
+
+// safeProcessOnce 安全地处理一次事件循环，捕获panic并返回是否应该退出
+func (p *Processor) safeProcessOnce(tick <-chan time.Time) (shouldExit bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			base.Zap().Sugar().Errorf("processor recovered from panic: %v", r)
+			base.Zap().Sugar().Errorf("stack trace:\n%s", debug.Stack())
+			// panic后不退出，继续处理下一个事件
+			shouldExit = false
 		}
 	}()
-	//go p.send()
-	base.Zap().Sugar().Infof("processor is starting ")
-	tick := time.Tick(p.loopTime)
-	for {
-		select {
-		case msg := <-p.MessageChan:
-			if cb, ok := p.CallbackMap[msg.Head.ID]; ok {
-				cb(msg)
-			} else if p.UnHandledHandler != nil {
-				p.UnHandledHandler(msg)
-			} else {
-				base.Zap().Sugar().Warnf("can't find callback(%d)", msg.Head.ID)
-			}
-		case event := <-p.EventChan:
-			if event.ID == ExitEvent {
-				base.Zap().Sugar().Infof("Processor exit : %s", event.Param)
-				return
-			}
-			if cb, ok := p.EventCallback[event.ID]; ok {
-				cb(event)
-			}
-		case f := <-p.FuncChan:
-			f()
-		case <-tick:
-			if p.updateCallback != nil {
-				p.updateCallback()
-			}
-		}
 
+	select {
+	case msg := <-p.MessageChan:
+		p.handleMessage(msg)
+	case event := <-p.EventChan:
+		if event.ID == ExitEvent {
+			base.Zap().Sugar().Infof("Processor exit: %s", event.Param)
+			return true
+		}
+		p.handleEvent(event)
+	case f := <-p.FuncChan:
+		p.handleFunc(f)
+	case <-tick:
+		if p.updateCallback != nil {
+			p.updateCallback()
+		}
 	}
+
+	return false
+}
+
+// handleMessage 安全地处理消息
+func (p *Processor) handleMessage(msg *Message) {
+	if cb, ok := p.CallbackMap[msg.Head.ID]; ok {
+		cb(msg)
+	} else if p.UnHandledHandler != nil {
+		p.UnHandledHandler(msg)
+	} else {
+		base.Zap().Sugar().Warnf("can't find callback(%d)", msg.Head.ID)
+	}
+}
+
+// handleEvent 安全地处理事件
+func (p *Processor) handleEvent(event *Event) {
+	if cb, ok := p.EventCallback[event.ID]; ok {
+		cb(event)
+	}
+}
+
+// handleFunc 安全地处理函数调用
+func (p *Processor) handleFunc(f ProcFunction) {
+	f()
 }

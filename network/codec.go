@@ -2,6 +2,7 @@ package network
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -32,16 +33,26 @@ func (ProtobufCodec) Unmarshal(data []byte, v interface{}) error {
 	return proto.Unmarshal(data, m)
 }
 
-var globalDefaultCodec Codec = ProtobufCodec{}
+// 使用atomic.Value确保线程安全
+var globalDefaultCodec atomic.Value
+
+func init() {
+	globalDefaultCodec.Store(Codec(ProtobufCodec{}))
+}
 
 // SetDefaultCodec sets the package-wide default codec used when none is specified.
+// This function is thread-safe.
 func SetDefaultCodec(c Codec) {
 	if c != nil {
-		globalDefaultCodec = c
+		globalDefaultCodec.Store(c)
 	}
 }
 
 // DefaultCodec returns the current package-wide default codec.
+// This function is thread-safe.
 func DefaultCodec() Codec {
-	return globalDefaultCodec
+	if c := globalDefaultCodec.Load(); c != nil {
+		return c.(Codec)
+	}
+	return ProtobufCodec{}
 }

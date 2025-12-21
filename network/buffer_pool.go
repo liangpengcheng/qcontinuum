@@ -302,21 +302,30 @@ func NewRingBuffer(size uint64) *RingBuffer {
 	}
 }
 
-// Push 推入数据
+// Push 推入数据（使用CAS确保多生产者线程安全）
+// 注意：此实现支持多个goroutine同时Push
 func (rb *RingBuffer) Push(data unsafe.Pointer) bool {
-	head := atomic.LoadUint64(&rb.head)
-	tail := atomic.LoadUint64(&rb.tail)
+	for {
+		head := atomic.LoadUint64(&rb.head)
+		tail := atomic.LoadUint64(&rb.tail)
 
-	if head-tail >= uint64(len(rb.buffer)) {
-		return false // 缓冲区满
+		if head-tail >= uint64(len(rb.buffer)) {
+			return false // 缓冲区满
+		}
+
+		// 使用CAS确保多生产者安全：先占位再写入
+		if atomic.CompareAndSwapUint64(&rb.head, head, head+1) {
+			// 成功占位后写入数据
+			rb.buffer[head&rb.mask] = data
+			return true
+		}
+		// CAS失败，说明有其他goroutine竞争，重试
 	}
-
-	rb.buffer[head&rb.mask] = data
-	atomic.StoreUint64(&rb.head, head+1)
-	return true
 }
 
-// Pop 弹出数据
+// Pop 弹出数据（单消费者模式）
+// 注意：调用者需确保同一时间只有一个goroutine调用Pop
+// （例如通过tryAsyncWrite中的writing原子变量保证）
 func (rb *RingBuffer) Pop() unsafe.Pointer {
 	tail := atomic.LoadUint64(&rb.tail)
 	head := atomic.LoadUint64(&rb.head)

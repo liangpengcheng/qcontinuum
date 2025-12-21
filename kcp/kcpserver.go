@@ -156,6 +156,10 @@ type KCPPeer struct {
 	// 统计信息
 	bytesRead    uint64
 	bytesWritten uint64
+
+	// 缓存的ClientPeer，避免重复创建
+	clientPeerOnce sync.Once
+	clientPeer     *network.ClientPeer
 }
 
 // NewKCPPeer 创建KCP peer
@@ -287,15 +291,27 @@ func (p *KCPPeer) CheckAfter(t time.Duration) {
 }
 
 // ToClientPeer 转换为兼容的ClientPeer（用于消息处理）
+// 使用sync.Once缓存，避免每次消息处理都创建新对象
 func (p *KCPPeer) ToClientPeer() *network.ClientPeer {
-	// 创建一个兼容的AsyncClientPeer包装
-	asyncPeer := &network.AsyncClientPeer{
-		Connection: &kcpConnWrapper{conn: p.conn},
-		ID:         p.ID,
-		Flag:       p.Flag,
-		Proc:       p.proc,
+	p.clientPeerOnce.Do(func() {
+		// 创建一个兼容的AsyncClientPeer包装
+		asyncPeer := &network.AsyncClientPeer{
+			Connection: &kcpConnWrapper{conn: p.conn},
+			ID:         p.ID,
+			Flag:       p.Flag,
+			Proc:       p.proc,
+			FD:         -1, // 标记为虚拟连接，避免使用reactor和async writes
+		}
+		p.clientPeer = &network.ClientPeer{AsyncClientPeer: asyncPeer}
+	})
+
+	// 同步ID和Flag（这些可能在认证后更新）
+	if p.clientPeer != nil && p.clientPeer.AsyncClientPeer != nil {
+		p.clientPeer.AsyncClientPeer.ID = p.ID
+		p.clientPeer.AsyncClientPeer.Flag = p.Flag
 	}
-	return &network.ClientPeer{AsyncClientPeer: asyncPeer}
+
+	return p.clientPeer
 }
 
 // ============ KCP服务器 ============
@@ -381,8 +397,10 @@ func (s *AsyncKCPServer) acceptLoop() {
 		if err := s.acceptOne(); err != nil {
 			if atomic.LoadInt32(&s.running) == 1 {
 				base.Zap().Sugar().Errorf("kcp accept error: %v", err)
+				// 避免在极端错误下 CPU 占用过高
+				time.Sleep(10 * time.Millisecond)
 			}
-			break
+			continue
 		}
 	}
 	base.Zap().Sugar().Infof("kcp accept loop exited")
@@ -458,7 +476,7 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *KCPPeer) {
 
 		// 记录统计信息
 		bytesRead, bytesWritten, lastActive := peer.GetStats()
-		base.Zap().Sugar().Debugf("kcp connection closed: addr=%v, read=%d, written=%d, last_active=%v",
+		base.Zap().Sugar().Infof("kcp connection closed: addr=%v, read=%d, written=%d, last_active=%v",
 			peer.RemoteAddr(), bytesRead, bytesWritten, lastActive)
 	}()
 
@@ -474,7 +492,7 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *KCPPeer) {
 		if err != nil {
 			putKCPBuffer(buffer)
 			if peer.GetState() == KCPPeerStateConnected {
-				base.Zap().Sugar().Debugf("kcp read error: %v", err)
+				base.Zap().Sugar().Infof("kcp read error: %v", err)
 			}
 			break
 		}
@@ -499,10 +517,24 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *KCPPeer) {
 
 		// 处理解析出的消息
 		for _, zcMsg := range messages {
+			// 获取消息体数据
+			body := zcMsg.GetBody()
+
+			// 根据处理模式决定是否复制消息体
+			var msgBody []byte
+			if s.processor.ImmediateMode {
+				// 同步处理模式：可以安全使用零拷贝
+				msgBody = body
+			} else {
+				// 异步处理模式：需要复制消息体
+				msgBody = make([]byte, len(body))
+				copy(msgBody, body)
+			}
+
 			msg := &network.Message{
 				Peer: peer.ToClientPeer(),
 				Head: zcMsg.Head,
-				Body: zcMsg.GetBody(),
+				Body: msgBody,
 			}
 
 			if s.processor.ImmediateMode {
@@ -515,7 +547,7 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *KCPPeer) {
 				select {
 				case s.processor.MessageChan <- msg:
 				default:
-					base.Zap().Sugar().Warnf("message queue full, dropping message")
+					base.Zap().Sugar().Warnf("kcp message queue full, dropping message")
 				}
 			}
 
