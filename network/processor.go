@@ -23,6 +23,19 @@ type Message struct {
 	Body []byte
 }
 
+// UnmarshalBody decodes Body into v using the provided codec or the package default.
+// This is an additive helper that allows formats other than Protobuf without breaking
+// existing users who directly decode from Body.
+func (m *Message) UnmarshalBody(v interface{}, codec ...Codec) error {
+	var c Codec
+	if len(codec) > 0 && codec[0] != nil {
+		c = codec[0]
+	} else {
+		c = DefaultCodec()
+	}
+	return c.Unmarshal(m.Body, v)
+}
+
 // Event 自定义事件
 type Event struct {
 	ID    int32       //eventid

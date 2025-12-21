@@ -11,6 +11,13 @@ import (
 	"github.com/liangpengcheng/qcontinuum/base"
 )
 
+const (
+	// 发送超时配置
+	sendTimeout    = 3 * time.Second       // 发送超时时间
+	sendRetryDelay = 10 * time.Millisecond // 重试间隔
+	sendMaxRetries = 300                   // 最大重试次数 (3秒/10ms = 300次)
+)
+
 // PeerState peer状态
 type PeerState int32
 
@@ -35,6 +42,9 @@ type AsyncClientPeer struct {
 	writer  *ZeroCopyMessageWriter
 	reactor *EpollReactor
 
+	// 可插拔编解码器（默认protobuf），仅用于新的通用接口
+	codec Codec
+
 	// 统计信息
 	bytesRead    uint64
 	bytesWritten uint64
@@ -53,6 +63,7 @@ func NewWebSocketClientPeer(conn net.Conn, proc *Processor) *ClientPeer {
 		reader:     NewAsyncMessageReader(),
 		writer:     NewZeroCopyMessageWriter(),
 		reactor:    nil, // WebSocket不使用reactor
+		codec:      DefaultCodec(),
 	}
 
 	return &ClientPeer{AsyncClientPeer: peer}
@@ -92,6 +103,7 @@ func NewAsyncClientPeer(conn net.Conn, proc *Processor, reactor *EpollReactor) (
 		writer:     NewZeroCopyMessageWriter(),
 		reactor:    reactor,
 		lastActive: time.Now().Unix(),
+		codec:      DefaultCodec(),
 	}
 
 	atomic.StoreInt32(&peer.state, int32(PeerStateConnected))
@@ -169,6 +181,53 @@ func (peer *AsyncClientPeer) Close() {
 	atomic.StoreInt32(&peer.state, int32(PeerStateClosed))
 }
 
+// pushToWriteQueueWithTimeout 带超时的写队列推送
+// 成功返回 true，超时返回 false
+func (peer *AsyncClientPeer) pushToWriteQueueWithTimeout(req *writeRequest) bool {
+	// 快速路径：直接尝试推送
+	if peer.writer.writeQueue.Push(unsafe.Pointer(req)) {
+		return true
+	}
+
+	// 慢速路径：重试直到超时
+	deadline := time.Now().Add(sendTimeout)
+	retries := 0
+
+	for retries < sendMaxRetries {
+		// 检查连接状态
+		if peer.GetState() != PeerStateConnected {
+			return false
+		}
+
+		// 检查超时
+		if time.Now().After(deadline) {
+			break
+		}
+
+		// 短暂等待后重试
+		time.Sleep(sendRetryDelay)
+		retries++
+
+		if peer.writer.writeQueue.Push(unsafe.Pointer(req)) {
+			if retries > 10 {
+				// 记录慢速发送
+				base.Zap().Sugar().Debugf("slow send detected: retries=%d, queue_size=%d",
+					retries, peer.writer.writeQueue.Size())
+			}
+			return true
+		}
+	}
+
+	// 超时失败
+	base.Zap().Sugar().Errorf("send timeout after %v, queue_size=%d, remote=%v",
+		sendTimeout, peer.writer.writeQueue.Size(), peer.Connection.RemoteAddr())
+
+	// 自动断开连接
+	go peer.Close()
+
+	return false
+}
+
 // Redirect 重新设置处理器（无锁实现）
 func (peer *AsyncClientPeer) Redirect(proc *Processor) {
 	atomic.StorePointer(&peer.redirectProc, unsafe.Pointer(proc))
@@ -186,7 +245,7 @@ func (peer *AsyncClientPeer) getProcessor() *Processor {
 	return peer.Proc
 }
 
-// SendMessage 发送消息（异步）
+// SendMessage 发送消息（异步，带超时保护）
 func (peer *AsyncClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 	if peer.GetState() != PeerStateConnected {
 		return errors.New("connection is not connected")
@@ -194,46 +253,59 @@ func (peer *AsyncClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 
 	// 检查是否为WebSocket连接（fd = -1表示虚拟连接）
 	if peer.fd == -1 {
-		// 对于WebSocket连接，直接序列化并发送
-		data, err := proto.Marshal(msg)
-		if err != nil {
-			return err
-		}
+		// 对于WebSocket连接，使用protobuf兼容的旧接口行为
+		return peer.SendWithCodec(msg, msgid, ProtobufCodec{})
+	}
 
-		// 创建带头部的完整消息
-		buffer := GetBuffer()
-		defer buffer.Release()
-
-		totalLen := len(data) + 8
-		if err := buffer.EnsureSpace(totalLen - buffer.Len()); err != nil {
-			return err
-		}
-
-		// 写入头部
-		head := MessageHead{
-			Length: int32(len(data)),
-			ID:     msgid,
-		}
-		if err := WriteHeadToBuffer(buffer, head); err != nil {
-			return err
-		}
-
-		// 验证容量并写入消息体
-		if buffer.Len()+len(data) > buffer.Cap() {
-			return ErrInsufficientSize
-		}
-
-		copy(buffer.Data()[8:], data)
-		buffer.SetLen(totalLen)
-
-		// 直接通过连接发送
-		_, err = peer.Connection.Write(buffer.Bytes())
-		atomic.AddUint64(&peer.bytesWritten, uint64(totalLen))
+	// 对于真实的TCP/UDP连接，使用自定义的带超时逻辑
+	// 序列化消息
+	data, err := proto.Marshal(msg)
+	if err != nil {
 		return err
 	}
 
-	// 对于真实的TCP/UDP连接，使用异步写入器
-	return peer.writer.WriteMessage(peer.fd, msg, msgid)
+	// 创建带头部的完整消息
+	buffer := GetBuffer()
+	totalLen := len(data) + 8
+
+	if err := buffer.EnsureSpace(totalLen); err != nil {
+		buffer.Release()
+		return err
+	}
+
+	// 写入头部
+	head := MessageHead{
+		Length: int32(len(data)),
+		ID:     msgid,
+	}
+	if err := WriteHeadToBuffer(buffer, head); err != nil {
+		buffer.Release()
+		return err
+	}
+
+	// 边界检查并写入消息体
+	if buffer.Len()+len(data) > buffer.Cap() {
+		buffer.Release()
+		return ErrInsufficientSize
+	}
+
+	copy(buffer.Data()[8:], data)
+	buffer.SetLen(totalLen)
+
+	// 创建写入请求
+	writeReq := &writeRequest{
+		fd:     peer.fd,
+		buffer: buffer,
+	}
+
+	// 使用带超时的推送
+	if !peer.pushToWriteQueueWithTimeout(writeReq) {
+		buffer.Release()
+		return errors.New("send timeout or connection closed")
+	}
+
+	peer.writer.tryAsyncWrite()
+	return nil
 }
 
 // SendMessageBuffer 发送缓冲区（异步）
@@ -272,9 +344,10 @@ func (peer *AsyncClientPeer) SendMessageBuffer(data []byte) error {
 		buffer: buffer,
 	}
 
-	if !peer.writer.writeQueue.Push(unsafe.Pointer(writeReq)) {
+	// 使用带超时的推送
+	if !peer.pushToWriteQueueWithTimeout(writeReq) {
 		buffer.Release()
-		return errors.New("write queue full")
+		return errors.New("send timeout or connection closed")
 	}
 
 	peer.writer.tryAsyncWrite()
@@ -328,13 +401,87 @@ func (peer *AsyncClientPeer) TransmitMsg(msg *Message) error {
 		buffer: buffer,
 	}
 
-	if !peer.writer.writeQueue.Push(unsafe.Pointer(writeReq)) {
+	// 使用带超时的推送
+	if !peer.pushToWriteQueueWithTimeout(writeReq) {
 		buffer.Release()
-		return errors.New("write queue full")
+		return errors.New("send timeout or connection closed")
 	}
 
 	peer.writer.tryAsyncWrite()
 	// 注意：buffer的所有权已经转移到writeRequest，会在doWrite中释放
+	return nil
+}
+
+// ============ 新增的通用接口（保持向后兼容）============
+
+// SetCodec 设置该peer默认使用的Codec。为nil时回退到默认Codec。
+func (peer *AsyncClientPeer) SetCodec(c Codec) {
+	if c == nil {
+		peer.codec = DefaultCodec()
+		return
+	}
+	peer.codec = c
+}
+
+// Send 使用peer的默认Codec进行序列化并发送
+func (peer *AsyncClientPeer) Send(v interface{}, msgid int32) error {
+	return peer.SendWithCodec(v, msgid, peer.codec)
+}
+
+// SendWithCodec 使用指定Codec进行序列化并发送
+func (peer *AsyncClientPeer) SendWithCodec(v interface{}, msgid int32, codec Codec) error {
+	if peer.GetState() != PeerStateConnected {
+		return errors.New("connection is not connected")
+	}
+	if codec == nil {
+		codec = DefaultCodec()
+	}
+	body, err := codec.Marshal(v)
+	if err != nil {
+		return err
+	}
+
+	// 创建带头部的完整消息
+	buffer := GetBuffer()
+	totalLen := len(body) + 8
+
+	if err := buffer.EnsureSpace(totalLen); err != nil {
+		buffer.Release()
+		return err
+	}
+
+	head := MessageHead{Length: int32(len(body)), ID: msgid}
+	if err := WriteHeadToBuffer(buffer, head); err != nil {
+		buffer.Release()
+		return err
+	}
+	if buffer.Len()+len(body) > buffer.Cap() {
+		buffer.Release()
+		return ErrInsufficientSize
+	}
+	copy(buffer.Data()[8:], body)
+	buffer.SetLen(totalLen)
+
+	// WebSocket直接写入，其他则入队
+	if peer.fd == -1 {
+		_, err = peer.Connection.Write(buffer.Bytes())
+		atomic.AddUint64(&peer.bytesWritten, uint64(totalLen))
+		buffer.Release()
+		return err
+	}
+
+	// 对于真实的TCP/UDP连接，使用带超时的推送
+	writeReq := &writeRequest{
+		fd:     peer.fd,
+		buffer: buffer,
+	}
+
+	if !peer.pushToWriteQueueWithTimeout(writeReq) {
+		buffer.Release()
+		return errors.New("send timeout or connection closed")
+	}
+
+	peer.writer.tryAsyncWrite()
 	return nil
 }
 
