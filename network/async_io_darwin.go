@@ -144,31 +144,36 @@ func (r *EpollReactor) Run() {
 			}
 
 			if event.Filter == syscall.EVFILT_READ {
-				// 读事件 - 使用简化的读取方式
-				buffer := getBuffer()
-
-				// 在macOS上，直接读取数据
-				conn := getConnFromFd(fd)
-				if conn != nil {
-					n, err := conn.Read(buffer.data[:buffer.cap])
-					if err != nil {
-						if err != syscall.EAGAIN {
-							handler.OnError(fd, err)
-						}
-						putBuffer(buffer)
-						continue
-					}
-					if n == 0 {
-						handler.OnClose(fd)
-						putBuffer(buffer)
-						continue
-					}
-					buffer.len = n
-					handler.OnRead(fd, buffer.data[:n])
-					// 处理完后释放buffer
-					putBuffer(buffer)
+				// 监听套接字直接触发 OnRead，让 Server 去 accept
+				if _, isListener := handler.(*AsyncTCPServer); isListener {
+					handler.OnRead(fd, nil)
 				} else {
-					putBuffer(buffer)
+					// 普通连接读取数据
+					buffer := getBuffer()
+
+					// 在macOS上，直接读取数据
+					conn := getConnFromFd(fd)
+					if conn != nil {
+						n, err := conn.Read(buffer.data[:buffer.cap])
+						if err != nil {
+							if err != syscall.EAGAIN {
+								handler.OnError(fd, err)
+							}
+							putBuffer(buffer)
+							continue
+						}
+						if n == 0 {
+							handler.OnClose(fd)
+							putBuffer(buffer)
+							continue
+						}
+						buffer.len = n
+						handler.OnRead(fd, buffer.data[:n])
+						// 处理完后释放buffer
+						putBuffer(buffer)
+					} else {
+						putBuffer(buffer)
+					}
 				}
 			}
 

@@ -305,6 +305,7 @@ func main() {
 	msgSize := flag.Int("msg-size", 64, "消息体大小(bytes)")
 	immediateMode := flag.Bool("immediate", false, "使用立即模式处理消息")
 	testConcurrent := flag.Bool("test-concurrent", false, "测试多goroutine同时向同一peer发消息")
+	connectDelay := flag.Int("connect-delay", 0, "每个客户端连接之间的延时(毫秒)，0表示无延时")
 	flag.Parse()
 
 	fmt.Println("========================================")
@@ -316,8 +317,8 @@ func main() {
 		fmt.Printf("运行模式: 服务器 (ImmediateMode=%v)\n", *immediateMode)
 		runServer(*tcpPort, *wsPort, *kcpPort, *immediateMode)
 	case "client":
-		fmt.Printf("运行模式: 客户端 (并发数=%d, 速率=%d/s, 消息大小=%d)\n", *clients, *rate, *msgSize)
-		runClient(*tcpPort, *wsPort, *kcpPort, *clients, *rate, *msgSize, *testConcurrent)
+		fmt.Printf("运行模式: 客户端 (并发数=%d, 速率=%d/s, 消息大小=%d, 连接延时=%dms)\n", *clients, *rate, *msgSize, *connectDelay)
+		runClient(*tcpPort, *wsPort, *kcpPort, *clients, *rate, *msgSize, *testConcurrent, *connectDelay)
 	default:
 		fmt.Println("未知模式，使用 --mode server 或 --mode client")
 		os.Exit(1)

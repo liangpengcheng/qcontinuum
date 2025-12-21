@@ -94,25 +94,30 @@ func (r *EpollReactor) Run() {
 			}
 
 			if event.Events&syscall.EPOLLIN != 0 {
-				// 读事件 - 使用零拷贝读取
-				buffer := getBuffer()
-				n, err := syscall.Read(fd, buffer.data[:buffer.cap])
-				if err != nil {
-					if err != syscall.EAGAIN {
-						handler.OnError(fd, err)
+				// 监听套接字不读取数据，直接触发 OnRead 让 Server 去 accept
+				if _, isListener := handler.(*AsyncTCPServer); isListener {
+					handler.OnRead(fd, nil)
+				} else {
+					// 普通连接读数据
+					buffer := getBuffer()
+					n, err := syscall.Read(fd, buffer.data[:buffer.cap])
+					if err != nil {
+						if err != syscall.EAGAIN {
+							handler.OnError(fd, err)
+						}
+						putBuffer(buffer)
+						continue
 					}
+					if n == 0 {
+						handler.OnClose(fd)
+						putBuffer(buffer)
+						continue
+					}
+					buffer.len = n
+					handler.OnRead(fd, buffer.data[:n])
+					// 处理完后释放buffer
 					putBuffer(buffer)
-					continue
 				}
-				if n == 0 {
-					handler.OnClose(fd)
-					putBuffer(buffer)
-					continue
-				}
-				buffer.len = n
-				handler.OnRead(fd, buffer.data[:n])
-				// 处理完后释放buffer
-				putBuffer(buffer)
 			}
 
 			if event.Events&syscall.EPOLLOUT != 0 {

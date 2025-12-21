@@ -27,11 +27,13 @@ func (s *ClientStats) AddLatency(d time.Duration) {
 }
 
 // runClient 启动客户端压力测试
-func runClient(tcpPort, wsPort, kcpPort, clientCount, rate, msgSize int, testConcurrent bool) {
+func runClient(tcpPort, wsPort, kcpPort, clientCount, rate, msgSize int, testConcurrent bool, connectDelayMs int) {
 	stats := &ClientStats{StartTime: time.Now()}
 
-	fmt.Printf("开始压力测试: TCP:%d, WS:%d, KCP:%d, 每个协议并发:%d, 速率:%d/s, 大小:%d\n",
-		tcpPort, wsPort, kcpPort, clientCount, rate, msgSize)
+	connectDelay := time.Duration(connectDelayMs) * time.Millisecond
+
+	fmt.Printf("开始压力测试: TCP:%d, WS:%d, KCP:%d, 每个协议并发:%d, 速率:%d/s, 大小:%d, 连接延时:%v\n",
+		tcpPort, wsPort, kcpPort, clientCount, rate, msgSize, connectDelay)
 
 	var wg sync.WaitGroup
 
@@ -42,6 +44,9 @@ func runClient(tcpPort, wsPort, kcpPort, clientCount, rate, msgSize int, testCon
 			defer wg.Done()
 			runTCPClient(fmt.Sprintf("127.0.0.1:%d", tcpPort), rate, msgSize, stats, testConcurrent)
 		}(i)
+		if connectDelay > 0 {
+			time.Sleep(connectDelay)
+		}
 	}
 
 	// 启动WebSocket客户端
@@ -51,6 +56,9 @@ func runClient(tcpPort, wsPort, kcpPort, clientCount, rate, msgSize int, testCon
 			defer wg.Done()
 			runWSClient(fmt.Sprintf("ws://127.0.0.1:%d/ws", wsPort), rate, msgSize, stats, testConcurrent)
 		}(i)
+		if connectDelay > 0 {
+			time.Sleep(connectDelay)
+		}
 	}
 
 	// 启动KCP客户端
@@ -60,6 +68,9 @@ func runClient(tcpPort, wsPort, kcpPort, clientCount, rate, msgSize int, testCon
 			defer wg.Done()
 			runKCPClient(fmt.Sprintf("127.0.0.1:%d", kcpPort), rate, msgSize, stats, testConcurrent)
 		}(i)
+		if connectDelay > 0 {
+			time.Sleep(connectDelay)
+		}
 	}
 
 	// 启动统计打印
