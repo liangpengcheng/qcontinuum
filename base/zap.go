@@ -11,15 +11,15 @@ import (
 
 var zp *zap.Logger
 
+// 日志目录路径通过命令行参数传递，定义在包级别
+var logDir = flag.String("logpath", "", "log directory path")
+
 func Zap() *zap.Logger {
 	return zp
 }
-func init_zap() {
-	// 日志目录路径通过命令行参数传递
-	logDir := flag.String("logpath", "", "log directory path")
-	// flag.Parse() // 移除 init 中的 flag.Parse()，由 main 函数统一调用，避免冲突
 
-
+// InitZap 初始化 zap 日志，必须在 flag.Parse() 之后调用
+func InitZap() {
 	if logDir != nil && *logDir != "" {
 		// 配置日志编码器
 		encoderConfig := zap.NewProductionEncoderConfig()
@@ -81,8 +81,7 @@ func init_zap() {
 	}
 }
 func init() {
-	init_zap()
-
-	//
-
+	// 默认初始化一个 production logger
+	// 如果需要使用 -logpath 参数，请在 flag.Parse() 之后调用 InitZap()
+	zp, _ = zap.NewProduction()
 }
