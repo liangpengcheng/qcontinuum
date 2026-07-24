@@ -58,6 +58,7 @@ const (
 	defaultBufferSize = 8192
 	poolSize          = 1024
 )
+const maxPooledBufferSize = 1024 * 1024
 
 // 错误定义
 var (
@@ -263,7 +264,7 @@ func putBuffer(buf *Buffer) {
 	if buf == nil {
 		return
 	}
-	if buf.cap > maxMessageLength+8 {
+	if buf.cap > maxPooledBufferSize {
 		return // 丢弃过大的缓冲区
 	}
 	atomic.AddInt64(&globalBufferPool.freeCount, 1)
@@ -279,72 +280,59 @@ func GetBufferStats() (alloc, free, hit, miss int64) {
 }
 
 // RingBuffer 无锁环形缓冲区
+type ringSlot struct {
+	sequence atomic.Uint64
+	data     unsafe.Pointer
+}
+
 type RingBuffer struct {
-	buffer []unsafe.Pointer
-	mask   uint64
-	_      [7]uint64 // 避免false sharing
-	head   uint64
-	_      [7]uint64 // 避免false sharing
-	tail   uint64
-	_      [7]uint64 // 避免false sharing
+	slots []ringSlot
+	mask  uint64
+	_     [7]uint64 // 避免false sharing
+	head  atomic.Uint64
+	_     [7]uint64 // 避免false sharing
+	tail  atomic.Uint64
+	_     [7]uint64 // 避免false sharing
 }
 
 // NewRingBuffer 创建环形缓冲区
 func NewRingBuffer(size uint64) *RingBuffer {
+	if size == 0 {
+		panic("size must be greater than zero")
+	}
 	// 确保size是2的幂
 	if size&(size-1) != 0 {
 		panic("size must be power of 2")
 	}
 
-	return &RingBuffer{
-		buffer: make([]unsafe.Pointer, size),
-		mask:   size - 1,
+	rb := &RingBuffer{
+		slots: make([]ringSlot, size),
+		mask:  size - 1,
 	}
+	for i := uint64(0); i < size; i++ {
+		rb.slots[i].sequence.Store(i)
+	}
+	return rb
 }
 
 // Push 推入数据（使用CAS确保多生产者线程安全）
 // 注意：此实现支持多个goroutine同时Push
-func (rb *RingBuffer) Push(data unsafe.Pointer) bool {
-	for {
-		head := atomic.LoadUint64(&rb.head)
-		tail := atomic.LoadUint64(&rb.tail)
 
-		if head-tail >= uint64(len(rb.buffer)) {
-			return false // 缓冲区满
-		}
+// 缓冲区满
 
-		// 使用CAS确保多生产者安全：先占位再写入
-		if atomic.CompareAndSwapUint64(&rb.head, head, head+1) {
-			// 成功占位后写入数据
-			rb.buffer[head&rb.mask] = data
-			return true
-		}
-		// CAS失败，说明有其他goroutine竞争，重试
-	}
-}
+// 使用CAS确保多生产者安全：先占位再写入
+
+// 成功占位后写入数据
+
+// CAS失败，说明有其他goroutine竞争，重试
 
 // Pop 弹出数据（单消费者模式）
 // 注意：调用者需确保同一时间只有一个goroutine调用Pop
 // （例如通过tryAsyncWrite中的writing原子变量保证）
-func (rb *RingBuffer) Pop() unsafe.Pointer {
-	tail := atomic.LoadUint64(&rb.tail)
-	head := atomic.LoadUint64(&rb.head)
 
-	if tail >= head {
-		return nil // 缓冲区空
-	}
-
-	data := rb.buffer[tail&rb.mask]
-	atomic.StoreUint64(&rb.tail, tail+1)
-	return data
-}
+// 缓冲区空
 
 // Size 获取当前大小
-func (rb *RingBuffer) Size() uint64 {
-	head := atomic.LoadUint64(&rb.head)
-	tail := atomic.LoadUint64(&rb.tail)
-	return head - tail
-}
 
 // MessageBuffer 消息缓冲区
 type MessageBuffer struct {

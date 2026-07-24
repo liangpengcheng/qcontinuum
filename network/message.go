@@ -3,8 +3,7 @@ package network
 import (
 	"errors"
 
-	"sync/atomic"
-	"unsafe"
+	"sync"
 
 	"github.com/golang/protobuf/proto"
 )
@@ -54,34 +53,14 @@ func (m *ZeroCopyMessage) Release() {
 }
 
 // ReadHeadFromBuffer 从缓冲区零拷贝读取消息头
-func ReadHeadFromBuffer(data []byte) (MessageHead, error) {
-	if len(data) < 8 {
-		return MessageHead{}, errors.New("insufficient data for message head")
-	}
 
-	// 直接从内存读取，避免拷贝
-	head := (*MessageHead)(unsafe.Pointer(&data[0]))
-	return *head, nil
-}
+// 直接从内存读取，避免拷贝
 
 // WriteHeadToBuffer 零拷贝写入消息头到缓冲区
-func WriteHeadToBuffer(buffer *Buffer, head MessageHead) error {
-	if buffer.Cap()-buffer.Len() < 8 {
-		if err := buffer.Grow(8); err != nil {
-			return err
-		}
-	}
 
-	// 再次验证容量（双重检查）
-	if buffer.Cap()-buffer.Len() < 8 {
-		return ErrInsufficientSize
-	}
+// 再次验证容量（双重检查）
 
-	// 直接内存写入
-	*(*MessageHead)(unsafe.Pointer(&buffer.Data()[buffer.Len()])) = head
-	buffer.SetLen(buffer.Len() + 8)
-	return nil
-}
+// 直接内存写入
 
 // AsyncMessageReader 异步消息读取器
 type AsyncMessageReader struct {
@@ -100,8 +79,17 @@ func NewAsyncMessageReader() *AsyncMessageReader {
 }
 
 // FeedData 向读取器投递数据
-func (r *AsyncMessageReader) FeedData(data []byte) ([]*ZeroCopyMessage, error) {
+func (r *AsyncMessageReader) FeedData(data []byte) (result []*ZeroCopyMessage, err error) {
 	var messages []*ZeroCopyMessage
+	defer func() {
+		if err == nil {
+			return
+		}
+		for _, msg := range messages {
+			msg.Release()
+		}
+		messages = nil
+	}()
 
 	// 检查输入数据大小
 	if len(data) == 0 {
@@ -209,6 +197,8 @@ func (r *AsyncMessageReader) FeedData(data []byte) ([]*ZeroCopyMessage, error) {
 				}
 
 				messages = append(messages, msg)
+				// Transfer the reader's ownership of the old buffer to msg.
+				msg.Buffer.Release()
 
 				// 重置状态
 				r.headerParsed = false
@@ -232,8 +222,19 @@ func (r *AsyncMessageReader) Release() {
 
 // ZeroCopyMessageWriter 零拷贝消息写入器
 type ZeroCopyMessageWriter struct {
-	writeQueue *RingBuffer
-	writing    int32
+	writeQueue  *RingBuffer
+	writing     int32
+	closed      int32
+	queuedBytes int64
+
+	pendingMu   sync.Mutex
+	pending     *writeRequest
+	lifecycleMu sync.Mutex
+	wg          sync.WaitGroup
+
+	onWriteInterest func(bool) error
+	onError         func(error)
+	onBytes         func(int)
 }
 
 // NewZeroCopyMessageWriter 创建零拷贝消息写入器
@@ -263,6 +264,9 @@ func (w *ZeroCopyMessageWriter) WriteMessageWithCodec(fd int, v interface{}, msg
 
 // WriteBody 直接写入已编码的消息体（零拷贝队列）
 func (w *ZeroCopyMessageWriter) WriteBody(fd int, body []byte, msgID int32) error {
+	if len(body) > maxMessageLength {
+		return ErrBufferTooLarge
+	}
 	// 创建带头部的完整消息
 	buffer := GetBuffer()
 	totalLen := len(body)
@@ -297,7 +301,7 @@ func (w *ZeroCopyMessageWriter) WriteBody(fd int, body []byte, msgID int32) erro
 		buffer: buffer,
 	}
 
-	if !w.writeQueue.Push(unsafe.Pointer(writeReq)) {
+	if !w.enqueue(writeReq) {
 		buffer.Release()
 		return errors.New("write queue full")
 	}
@@ -309,30 +313,15 @@ func (w *ZeroCopyMessageWriter) WriteBody(fd int, body []byte, msgID int32) erro
 }
 
 type writeRequest struct {
-	fd     int
-	buffer *Buffer
-	offset int
+	fd        int
+	buffer    *Buffer
+	offset    int
+	accounted int32
+	released  int32
 }
 
 // tryAsyncWrite 尝试异步写入
-func (w *ZeroCopyMessageWriter) tryAsyncWrite() {
-	if !atomic.CompareAndSwapInt32(&w.writing, 0, 1) {
-		return // 已经在写入中
-	}
 
-	go func() {
-		defer atomic.StoreInt32(&w.writing, 0)
-
-		for {
-			ptr := w.writeQueue.Pop()
-			if ptr == nil {
-				break
-			}
-
-			req := (*writeRequest)(ptr)
-			w.doWrite(req)
-		}
-	}()
-}
+// 已经在写入中
 
 // doWrite 执行实际写入 - 平台特定实现在message_unix.go和message_windows.go中

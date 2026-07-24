@@ -14,6 +14,8 @@ import (
 	_kcp "github.com/xtaci/kcp-go/v5"
 )
 
+const maxKCPMessageLength = 100 * 1024 * 1024
+
 // ============ KCP配置 ============
 
 // KCPConfig KCP服务器配置
@@ -201,6 +203,9 @@ func (p *KCPPeer) SendMessage(msg proto.Message, msgid int32) error {
 		return err
 	}
 
+	if len(data) > maxKCPMessageLength {
+		return errors.New("message too large")
+	}
 	// 创建完整消息（头部+数据）
 	totalLen := len(data) + 8
 	buffer := make([]byte, totalLen)
@@ -227,6 +232,9 @@ func (p *KCPPeer) SendMessageBuffer(data []byte) error {
 	if p.GetState() != KCPPeerStateConnected {
 		return errors.New("connection is not connected")
 	}
+	if len(data) > maxKCPMessageLength+8 {
+		return errors.New("message too large")
+	}
 
 	n, err := p.conn.Write(data)
 	if err != nil {
@@ -240,6 +248,12 @@ func (p *KCPPeer) SendMessageBuffer(data []byte) error {
 func (p *KCPPeer) TransmitMsg(msg *network.Message) error {
 	if p.GetState() != KCPPeerStateConnected {
 		return errors.New("connection is not connected")
+	}
+	if msg == nil || msg.Head.Length < 0 || int(msg.Head.Length) != len(msg.Body) {
+		return errors.New("message head length does not match body")
+	}
+	if len(msg.Body) > maxKCPMessageLength {
+		return errors.New("message too large")
 	}
 
 	// 创建完整消息
@@ -322,9 +336,13 @@ type AsyncKCPServer struct {
 	processor   *network.Processor
 	config      *KCPConfig
 	running     int32
+	started     int32
+	peers       sync.Map
+	wg          sync.WaitGroup
 	acceptCount uint64
 	connCount   uint64
 	stopChan    chan struct{}
+	stopOnce    sync.Once
 }
 
 // NewAsyncKCPServer 创建异步KCP服务器（使用默认配置）
@@ -383,6 +401,9 @@ func (s *AsyncKCPServer) StartAsync() error {
 		return errors.New("processor not set")
 	}
 
+	if !atomic.CompareAndSwapInt32(&s.started, 0, 1) {
+		return errors.New("server already started or stopped")
+	}
 	atomic.StoreInt32(&s.running, 1)
 
 	// KCP的accept循环在goroutine中运行
@@ -422,6 +443,10 @@ func (s *AsyncKCPServer) acceptOne() error {
 	peer := NewKCPPeer(conn, s.processor)
 
 	// 启动连接处理goroutine
+	atomic.AddUint64(&s.acceptCount, 1)
+	atomic.AddUint64(&s.connCount, 1)
+	s.wg.Add(1)
+	s.peers.Store(peer, struct{}{})
 	go s.handleKCPConnection(peer)
 
 	// 发送连接事件
@@ -435,9 +460,6 @@ func (s *AsyncKCPServer) acceptOne() error {
 	default:
 		base.Zap().Sugar().Warnf("event queue full, dropping add event")
 	}
-
-	atomic.AddUint64(&s.acceptCount, 1)
-	atomic.AddUint64(&s.connCount, 1)
 
 	return nil
 }
@@ -454,6 +476,8 @@ func (s *AsyncKCPServer) setupKCPConn(conn *_kcp.UDPSession) {
 
 // handleKCPConnection 处理KCP连接
 func (s *AsyncKCPServer) handleKCPConnection(peer *KCPPeer) {
+	defer s.wg.Done()
+	defer s.peers.Delete(peer)
 	defer func() {
 		// 确保连接关闭
 		peer.Close()
@@ -557,16 +581,8 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *KCPPeer) {
 }
 
 // Stop 停止KCP服务器
-func (s *AsyncKCPServer) Stop() {
-	atomic.StoreInt32(&s.running, 0)
 
-	// 通知停止
-	close(s.stopChan)
-
-	if s.listener != nil {
-		s.listener.Close()
-	}
-}
+// 通知停止
 
 // GetStats 获取服务器统计信息
 func (s *AsyncKCPServer) GetStats() (acceptCount, connCount uint64) {

@@ -2,13 +2,14 @@ package network
 
 import (
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"unsafe"
 )
 
 // 异步I/O事件类型
 const (
-	EventRead  = 1 << iota
+	EventRead = 1 << iota
 	EventWrite
 	EventError
 	EventClose
@@ -31,8 +32,10 @@ type AsyncIOHandler interface {
 
 // IOReactorPool reactor池接口
 type IOReactorPool struct {
-	reactors []*EpollReactor
-	next     uint64
+	reactors  []*EpollReactor
+	next      uint64
+	wg        sync.WaitGroup
+	closeOnce sync.Once
 }
 
 // NewIOReactorPool 创建reactor池
@@ -55,7 +58,11 @@ func NewIOReactorPool(size int) (*IOReactorPool, error) {
 			return nil, err
 		}
 		pool.reactors[i] = reactor
-		go reactor.Run()
+		pool.wg.Add(1)
+		go func(r *EpollReactor) {
+			defer pool.wg.Done()
+			r.Run()
+		}(reactor)
 	}
 
 	return pool, nil
@@ -72,10 +79,13 @@ func (p *IOReactorPool) GetReactor() *EpollReactor {
 
 // Close 关闭所有reactor
 func (p *IOReactorPool) Close() error {
-	for _, reactor := range p.reactors {
-		if reactor != nil {
-			reactor.Close()
+	p.closeOnce.Do(func() {
+		for _, reactor := range p.reactors {
+			if reactor != nil {
+				reactor.Close()
+			}
 		}
-	}
+		p.wg.Wait()
+	})
 	return nil
 }

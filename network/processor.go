@@ -2,6 +2,7 @@ package network
 
 import (
 	"runtime/debug"
+	"sync"
 	"time"
 
 	"github.com/liangpengcheng/qcontinuum/base"
@@ -66,6 +67,7 @@ type Processor struct {
 	loopTime time.Duration
 	// ImmediateMode 立即回调消息，如果想要线程安全，必须设置为false，默认为false
 	ImmediateMode bool
+	mu            sync.RWMutex
 }
 
 // NewProcessor 新建处理器，包含初始化操作
@@ -74,7 +76,10 @@ func NewProcessor() *Processor {
 }
 
 // NewProcessorWithLoopTime 指定定时器
-func NewProcessorWithLoopTime(time time.Duration) *Processor {
+func NewProcessorWithLoopTime(loopTime time.Duration) *Processor {
+	if loopTime <= 0 {
+		loopTime = 24 * time.Hour
+	}
 	p := &Processor{
 		MessageChan: make(chan *Message, 1024),
 		//SendChan:      make(chan *Message, 1024),
@@ -82,7 +87,7 @@ func NewProcessorWithLoopTime(time time.Duration) *Processor {
 		FuncChan:      make(chan ProcFunction, 64),
 		EventCallback: make(map[int32]EventCallback),
 		CallbackMap:   make(map[int32]MsgCallback),
-		loopTime:      time,
+		loopTime:      loopTime,
 		ImmediateMode: false,
 	}
 	return p
@@ -90,7 +95,9 @@ func NewProcessorWithLoopTime(time time.Duration) *Processor {
 
 // AddCallback 设置回调
 func (p *Processor) addCallback(id int32, callback MsgCallback) {
+	p.mu.Lock()
 	p.CallbackMap[id] = callback
+	p.mu.Unlock()
 }
 
 // AddCallback 设置回调
@@ -108,17 +115,23 @@ func (p *Processor) SetUpdate(uptime time.Duration, upcall ProcFunction) {
 
 // RemoveCallback 删除回调
 func (p *Processor) RemoveCallback(id int32) {
+	p.mu.Lock()
 	delete(p.CallbackMap, id)
+	p.mu.Unlock()
 }
 
 // AddEventCallback 事件处理函数注册
 func (p *Processor) AddEventCallback(id int32, callback EventCallback) {
+	p.mu.Lock()
 	p.EventCallback[id] = callback
+	p.mu.Unlock()
 }
 
 // RemoveEventCallback 删除事件处理回调
 func (p *Processor) RemoveEventCallback(id int32) {
+	p.mu.Lock()
 	delete(p.EventCallback, id)
+	p.mu.Unlock()
 }
 
 /*
@@ -137,11 +150,12 @@ func (p *Processor) send() {
 // 只有调用了这个接口，处理器才会处理实际的信息，以及实际发送消息
 func (p *Processor) StartProcess() {
 	base.Zap().Sugar().Infof("processor is starting")
-	tick := time.Tick(p.loopTime)
+	ticker := time.NewTicker(p.loopTime)
+	defer ticker.Stop()
 
 	for {
 		// 使用safeProcessOnce处理单次循环，确保panic不会导致退出
-		shouldExit := p.safeProcessOnce(tick)
+		shouldExit := p.safeProcessOnce(ticker.C)
 		if shouldExit {
 			return
 		}
@@ -181,10 +195,14 @@ func (p *Processor) safeProcessOnce(tick <-chan time.Time) (shouldExit bool) {
 
 // handleMessage 安全地处理消息
 func (p *Processor) handleMessage(msg *Message) {
-	if cb, ok := p.CallbackMap[msg.Head.ID]; ok {
+	p.mu.RLock()
+	cb, ok := p.CallbackMap[msg.Head.ID]
+	unhandled := p.UnHandledHandler
+	p.mu.RUnlock()
+	if ok {
 		cb(msg)
-	} else if p.UnHandledHandler != nil {
-		p.UnHandledHandler(msg)
+	} else if unhandled != nil {
+		unhandled(msg)
 	} else {
 		base.Zap().Sugar().Warnf("can't find callback(%d)", msg.Head.ID)
 	}
@@ -192,7 +210,10 @@ func (p *Processor) handleMessage(msg *Message) {
 
 // handleEvent 安全地处理事件
 func (p *Processor) handleEvent(event *Event) {
-	if cb, ok := p.EventCallback[event.ID]; ok {
+	p.mu.RLock()
+	cb, ok := p.EventCallback[event.ID]
+	p.mu.RUnlock()
+	if ok {
 		cb(event)
 	}
 }

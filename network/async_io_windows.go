@@ -1,5 +1,4 @@
 //go:build windows
-// +build windows
 
 package network
 
@@ -8,341 +7,172 @@ import (
 	"net"
 	"sync"
 	"sync/atomic"
-	"unsafe"
-
-	"github.com/liangpengcheng/qcontinuum/base"
-	"golang.org/x/sys/windows"
+	"time"
 )
 
-// Windows使用IOCP (I/O Completion Ports)
-
-const (
-	// IOCP操作类型
-	IOCP_OP_READ  = 1
-	IOCP_OP_WRITE = 2
-	IOCP_OP_CLOSE = 3
-)
-
-// IOCPOverlapped IOCP重叠结构
-type IOCPOverlapped struct {
-	overlapped windows.Overlapped
-	opType     uint32
-	fd         int
-	buffer     *Buffer
-	handler    AsyncIOHandler
+// Windows uses Go”s net runtime, which is already backed by IOCP. Re-associating
+// a net.TCPConn with a second completion port is invalid, so this adapter turns
+// blocking net.Conn reads into reactor callbacks with one managed goroutine per
+// connection.
+type windowsRegistration struct {
+	conn    net.Conn
+	handler AsyncIOHandler
+	stop    chan struct{}
+	once    sync.Once
 }
 
-// IOCPReactor Windows IOCP反应器
-type IOCPReactor struct {
-	iocp     windows.Handle
-	handlers map[int]AsyncIOHandler
-	mu       sync.RWMutex
-	running  int32
-
-	// 操作池，避免频繁分配
-	opPool sync.Pool
+func (r *windowsRegistration) close() {
+	r.once.Do(func() { close(r.stop) })
 }
 
-// NewEpollReactor 创建IOCP反应器（在Windows上使用IOCP）
-func NewEpollReactor() (*EpollReactor, error) {
-	// 创建IOCP句柄
-	iocp, err := windows.CreateIoCompletionPort(windows.InvalidHandle, 0, 0, 0)
-	if err != nil {
-		return nil, err
+func (r *windowsRegistration) stopped() bool {
+	select {
+	case <-r.stop:
+		return true
+	default:
+		return false
 	}
-
-	reactor := &IOCPReactor{
-		iocp:     iocp,
-		handlers: make(map[int]AsyncIOHandler),
-		opPool: sync.Pool{
-			New: func() interface{} {
-				return &IOCPOverlapped{}
-			},
-		},
-	}
-
-	// 包装为EpollReactor接口
-	return &EpollReactor{reactor}, nil
 }
 
-// EpollReactor 兼容接口（内部使用IOCP）
 type EpollReactor struct {
-	*IOCPReactor
+	handlers  map[int]*windowsRegistration
+	mu        sync.RWMutex
+	state     int32
+	stop      chan struct{}
+	closeOnce sync.Once
+	wg        sync.WaitGroup
 }
 
-// AddFd 添加文件描述符到IOCP
-func (r *EpollReactor) AddFd(fd int, events uint32, handler AsyncIOHandler) error {
-	r.mu.Lock()
-	r.handlers[fd] = handler
-	r.mu.Unlock()
+// Compatibility aliases for code that named the former Windows implementation.
+// I/O completion is now owned by Go's runtime IOCP poller.
+type IOCPReactor = EpollReactor
 
-	// 获取socket句柄
+type IOCPOverlapped struct{}
+
+func NewEpollReactor() (*EpollReactor, error) {
+	return &EpollReactor{
+		handlers: make(map[int]*windowsRegistration),
+		stop:     make(chan struct{}),
+	}, nil
+}
+
+func (r *EpollReactor) AddFd(fd int, events uint32, handler AsyncIOHandler) error {
+	if atomic.LoadInt32(&r.state) == 2 {
+		return errors.New("reactor is closed")
+	}
 	conn := getConnFromFd(fd)
 	if conn == nil {
 		return errors.New("connection not found for fd")
 	}
 
-	// 获取socket句柄
-	socketHandle, err := getSocketHandle(conn)
-	if err != nil {
-		return err
+	reg := &windowsRegistration{
+		conn:    conn,
+		handler: handler,
+		stop:    make(chan struct{}),
 	}
 
-	// 将socket关联到IOCP
-	_, err = windows.CreateIoCompletionPort(socketHandle, r.iocp, uintptr(fd), 0)
-	if err != nil {
-		return err
+	r.mu.Lock()
+	if _, exists := r.handlers[fd]; exists {
+		r.mu.Unlock()
+		return errors.New("fd already registered")
 	}
+	r.handlers[fd] = reg
+	r.mu.Unlock()
 
-	// 如果需要读事件，立即投递一个读操作
 	if events&EpollIn != 0 {
-		r.postRead(fd, handler)
+		r.wg.Add(1)
+		go r.readLoop(fd, reg)
 	}
-
 	return nil
 }
 
-// ModifyFd 修改文件描述符事件
 func (r *EpollReactor) ModifyFd(fd int, events uint32) error {
-	// IOCP不需要修改事件，通过重新投递操作来实现
 	r.mu.RLock()
-	handler, exists := r.handlers[fd]
+	_, exists := r.handlers[fd]
 	r.mu.RUnlock()
-
 	if !exists {
 		return errors.New("handler not found")
 	}
-
-	if events&EpollIn != 0 {
-		r.postRead(fd, handler)
-	}
-
+	// Writes are performed by the peer writer goroutine. Go''s net package
+	// handles writable readiness through the runtime IOCP poller.
 	return nil
 }
 
-// RemoveFd 从IOCP移除文件描述符
 func (r *EpollReactor) RemoveFd(fd int) error {
 	r.mu.Lock()
+	reg := r.handlers[fd]
 	delete(r.handlers, fd)
 	r.mu.Unlock()
-
-	// IOCP会自动处理socket关闭时的清理
+	if reg != nil {
+		reg.close()
+	}
 	return nil
 }
 
-// postRead 投递异步读操作
-func (r *IOCPReactor) postRead(fd int, handler AsyncIOHandler) {
-	conn := getConnFromFd(fd)
-	if conn == nil {
-		return
-	}
+func (r *EpollReactor) readLoop(fd int, reg *windowsRegistration) {
+	defer r.wg.Done()
 
-	socketHandle, err := getSocketHandle(conn)
-	if err != nil {
-		handler.OnError(fd, err)
-		return
-	}
-
-	// 从池中获取操作结构
-	op := r.opPool.Get().(*IOCPOverlapped)
-	op.opType = IOCP_OP_READ
-	op.fd = fd
-	op.handler = handler
-	op.buffer = GetBuffer()
-
-	// 扩展缓冲区
-	if op.buffer.Cap() < 32*1024 {
-		if err := op.buffer.Grow(32*1024 - op.buffer.Cap()); err != nil {
-			op.buffer.Release()
-			r.opPool.Put(op)
-			handler.OnError(fd, err)
-			return
-		}
-	}
-
-	// 投递WSARecv操作
-	var bytesReceived uint32
-	var flags uint32
-	wsaBuf := windows.WSABuf{
-		Len: uint32(op.buffer.Cap()),
-		Buf: (*byte)(unsafe.Pointer(&op.buffer.Data()[0])),
-	}
-
-	err = windows.WSARecv(socketHandle, &wsaBuf, 1, &bytesReceived, &flags, &op.overlapped, nil)
-	if err != nil && err != windows.ERROR_IO_PENDING {
-		// 立即失败
-		op.buffer.Release()
-		r.opPool.Put(op)
-		handler.OnError(fd, err)
-	}
-}
-
-// postWrite 投递异步写操作
-func (r *IOCPReactor) postWrite(fd int, handler AsyncIOHandler, data []byte) {
-	conn := getConnFromFd(fd)
-	if conn == nil {
-		return
-	}
-
-	socketHandle, err := getSocketHandle(conn)
-	if err != nil {
-		handler.OnError(fd, err)
-		return
-	}
-
-	// 从池中获取操作结构
-	op := r.opPool.Get().(*IOCPOverlapped)
-	op.opType = IOCP_OP_WRITE
-	op.fd = fd
-	op.handler = handler
-	op.buffer = GetBuffer()
-
-	// 复制数据到缓冲区
-	if op.buffer.Cap() < len(data) {
-		if err := op.buffer.Grow(len(data) - op.buffer.Cap()); err != nil {
-			op.buffer.Release()
-			r.opPool.Put(op)
-			handler.OnError(fd, err)
-			return
-		}
-	}
-	copy(op.buffer.Data(), data)
-	op.buffer.SetLen(len(data))
-
-	// 投递WSASend操作
-	var bytesSent uint32
-	wsaBuf := windows.WSABuf{
-		Len: uint32(op.buffer.Len()),
-		Buf: (*byte)(unsafe.Pointer(&op.buffer.Data()[0])),
-	}
-
-	err = windows.WSASend(socketHandle, &wsaBuf, 1, &bytesSent, 0, &op.overlapped, nil)
-	if err != nil && err != windows.ERROR_IO_PENDING {
-		// 立即失败
-		op.buffer.Release()
-		r.opPool.Put(op)
-		handler.OnError(fd, err)
-	}
-}
-
-// Run 运行IOCP事件循环
-func (r *EpollReactor) Run() {
-	atomic.StoreInt32(&r.running, 1)
-	defer atomic.StoreInt32(&r.running, 0)
-
-	for atomic.LoadInt32(&r.running) == 1 {
-		var bytesTransferred uint32
-		var completionKey uintptr
-		var overlapped *windows.Overlapped
-
-		// 等待I/O完成事件
-		err := windows.GetQueuedCompletionStatus(windows.Handle(r.iocp), &bytesTransferred, &completionKey, &overlapped, 100)
-
-		if err != nil {
-			// 检查是否是超时错误
-			if errno, ok := err.(windows.Errno); ok && errno == 258 { // WAIT_TIMEOUT
-				continue // 超时，继续循环
+	for !reg.stopped() && atomic.LoadInt32(&r.state) != 2 {
+		buffer := getBuffer()
+		n, err := reg.conn.Read(buffer.Data())
+		if n > 0 {
+			buffer.SetLen(n)
+			if readErr := reg.handler.OnRead(fd, buffer.Bytes()); readErr != nil {
+				buffer.Release()
+				if !reg.stopped() {
+					reg.handler.OnError(fd, readErr)
+				}
+				return
 			}
-			base.Zap().Sugar().Errorf("IOCP error: %v", err)
-			continue
 		}
+		buffer.Release()
 
-		if overlapped == nil {
-			continue
+		if err != nil {
+			if !reg.stopped() {
+				reg.handler.OnError(fd, err)
+			}
+			return
 		}
-
-		// 从overlapped结构恢复操作信息
-		op := (*IOCPOverlapped)(unsafe.Pointer(overlapped))
-		fd := int(completionKey)
-
-		// 处理完成的操作
-		r.handleCompletion(op, fd, bytesTransferred, err)
+		if n == 0 {
+			if !reg.stopped() {
+				reg.handler.OnClose(fd)
+			}
+			return
+		}
 	}
 }
 
-// handleCompletion 处理I/O完成事件
-func (r *IOCPReactor) handleCompletion(op *IOCPOverlapped, fd int, bytesTransferred uint32, err error) {
-	defer func() {
-		if op.buffer != nil {
-			op.buffer.Release()
-		}
-		r.opPool.Put(op)
-	}()
-
-	handler := op.handler
-	if handler == nil {
+func (r *EpollReactor) Run() {
+	if !atomic.CompareAndSwapInt32(&r.state, 0, 1) {
 		return
 	}
-
-	switch op.opType {
-	case IOCP_OP_READ:
-		if err != nil {
-			handler.OnError(fd, err)
-			return
-		}
-
-		if bytesTransferred == 0 {
-			handler.OnClose(fd)
-			return
-		}
-
-		// 设置缓冲区长度并调用处理器
-		op.buffer.SetLen(int(bytesTransferred))
-		if err := handler.OnRead(fd, op.buffer.Data()[:bytesTransferred]); err != nil {
-			handler.OnError(fd, err)
-			return
-		}
-
-		// 继续投递读操作
-		r.postRead(fd, handler)
-
-	case IOCP_OP_WRITE:
-		if err != nil {
-			handler.OnError(fd, err)
-			return
-		}
-
-		// 写完成，通知处理器
-		handler.OnWrite(fd)
-
-	case IOCP_OP_CLOSE:
-		handler.OnClose(fd)
-	}
+	<-r.stop
 }
 
-// Stop 停止IOCP事件循环
 func (r *EpollReactor) Stop() {
-	atomic.StoreInt32(&r.running, 0)
+	r.closeOnce.Do(func() {
+		atomic.StoreInt32(&r.state, 2)
+		close(r.stop)
 
-	// 向IOCP投递一个退出信号
-	windows.PostQueuedCompletionStatus(windows.Handle(r.iocp), 0, 0, nil)
+		r.mu.RLock()
+		regs := make([]*windowsRegistration, 0, len(r.handlers))
+		for _, reg := range r.handlers {
+			regs = append(regs, reg)
+		}
+		r.mu.RUnlock()
+		for _, reg := range regs {
+			reg.close()
+			_ = reg.conn.SetReadDeadline(time.Now())
+		}
+	})
 }
 
-// Close 关闭IOCP reactor
 func (r *EpollReactor) Close() error {
 	r.Stop()
-	if r.iocp != windows.InvalidHandle {
-		return windows.CloseHandle(r.iocp)
-	}
+	r.wg.Wait()
 	return nil
 }
 
-// getSocketHandle 从net.Conn获取socket句柄
-func getSocketHandle(conn net.Conn) (windows.Handle, error) {
-	// 尝试获取底层的socket句柄
-	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		file, err := tcpConn.File()
-		if err != nil {
-			return windows.InvalidHandle, err
-		}
-		defer file.Close()
-		return windows.Handle(file.Fd()), nil
-	}
-
-	return windows.InvalidHandle, errors.New("unsupported connection type")
-}
-
-// Windows连接映射
 var connMap sync.Map
 
 func setConnForFd(fd int, conn net.Conn) {
@@ -350,8 +180,8 @@ func setConnForFd(fd int, conn net.Conn) {
 }
 
 func getConnFromFd(fd int) net.Conn {
-	if v, ok := connMap.Load(fd); ok {
-		return v.(net.Conn)
+	if value, ok := connMap.Load(fd); ok {
+		return value.(net.Conn)
 	}
 	return nil
 }
@@ -360,8 +190,6 @@ func removeConnFromFd(fd int) {
 	connMap.Delete(fd)
 }
 
-// setNonblock Windows IOCP不需要设置非阻塞
 func setNonblock(fd int) error {
-	// IOCP本身就是异步的，不需要设置非阻塞
 	return nil
 }

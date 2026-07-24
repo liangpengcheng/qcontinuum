@@ -3,168 +3,82 @@ package network
 import (
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/liangpengcheng/qcontinuum/base"
-
 	"golang.org/x/net/websocket"
 )
 
 type WebSocketPeer struct {
 	Connection *websocket.Conn
+	writeMu    sync.Mutex
 }
 
-func (ws *WebSocketPeer) Write(data []byte) (n int, err error) {
-	return len(data), websocket.Message.Send(ws.Connection, data)
-}
-func (ws *WebSocketPeer) Read(msg []byte) (n int, err error) {
-	return ws.Connection.Read(msg)
-}
-
-func (ws *WebSocketPeer) Close() error {
-	return ws.Connection.Close()
-}
-func (ws *WebSocketPeer) LocalAddr() net.Addr {
-	return ws.Connection.LocalAddr()
-}
-func (ws *WebSocketPeer) RemoteAddr() net.Addr {
-	return ws.Connection.RemoteAddr()
+func (ws *WebSocketPeer) Write(data []byte) (int, error) {
+	ws.writeMu.Lock()
+	defer ws.writeMu.Unlock()
+	if err := websocket.Message.Send(ws.Connection, data); err != nil {
+		return 0, err
+	}
+	return len(data), nil
 }
 
-// SetDeadline sets the connection's network read & write deadlines.
-func (ws *WebSocketPeer) SetDeadline(t time.Time) error {
-	return ws.Connection.SetDeadline(t)
+func (ws *WebSocketPeer) Read(data []byte) (int, error) {
+	return ws.Connection.Read(data)
 }
 
-// SetReadDeadline sets the connection's network read deadline.
-func (ws *WebSocketPeer) SetReadDeadline(t time.Time) error {
-	return ws.Connection.SetReadDeadline(t)
-}
-
-// SetWriteDeadline sets the connection's network write deadline.
+func (ws *WebSocketPeer) Close() error                      { return ws.Connection.Close() }
+func (ws *WebSocketPeer) LocalAddr() net.Addr               { return ws.Connection.LocalAddr() }
+func (ws *WebSocketPeer) RemoteAddr() net.Addr              { return ws.Connection.RemoteAddr() }
+func (ws *WebSocketPeer) SetDeadline(t time.Time) error     { return ws.Connection.SetDeadline(t) }
+func (ws *WebSocketPeer) SetReadDeadline(t time.Time) error { return ws.Connection.SetReadDeadline(t) }
 func (ws *WebSocketPeer) SetWriteDeadline(t time.Time) error {
 	return ws.Connection.SetWriteDeadline(t)
 }
 
-// WebSocketServer websocket服务器
-type WebSocketServer struct {
-	Connection *WebSocketPeer
-}
-
-// NewWebSocket 新建一个websocket处理,这个是golang系统http建立的http服务的socket，访问在/ws下
 func NewWebSocket(path string, proc *Processor) {
-	http.Handle(path, websocket.Handler(
-		func(ws *websocket.Conn) {
-			base.Zap().Sugar().Infof("new webclient connected :%s", ws.RemoteAddr().String())
+	http.Handle(path, websocket.Handler(func(ws *websocket.Conn) {
+		if proc == nil {
+			_ = ws.Close()
+			return
+		}
 
-			// 创建WebSocket连接的包装器
-			wsPeer := &WebSocketPeer{Connection: ws}
-
-			// 为WebSocket创建专用的peer
-			peer := NewWebSocketClientPeer(wsPeer, proc)
-
-			event := &Event{
-				ID:   AddEvent,
-				Peer: peer,
+		base.Zap().Sugar().Infof("new webclient connected: %s", ws.RemoteAddr())
+		peer := NewWebSocketClientPeer(&WebSocketPeer{Connection: ws}, proc)
+		if !proc.TryPostEvent(&Event{ID: AddEvent, Peer: peer}) {
+			peer.Close()
+			return
+		}
+		defer func() {
+			peer.Close()
+			if !proc.TryPostEvent(&Event{ID: RemoveEvent, Peer: peer}) {
+				base.Zap().Sugar().Warnf("websocket remove event queue full")
 			}
-			// 使用select避免channel满时阻塞
-			select {
-			case proc.EventChan <- event:
-			default:
-				base.Zap().Sugar().Warnf("websocket event queue full, dropping add event")
+		}()
+
+		reader := NewAsyncMessageReader()
+		defer reader.Release()
+
+		for {
+			var data []byte
+			if err := websocket.Message.Receive(ws, &data); err != nil {
+				return
 			}
-			defer func() {
-				leaveEvent := &Event{
-					ID:   RemoveEvent,
-					Peer: peer,
-				}
-				// 使用select避免channel满时阻塞
-				select {
-				case proc.EventChan <- leaveEvent:
-				default:
-					base.Zap().Sugar().Warnf("websocket event queue full, dropping remove event")
-				}
-			}()
-
-			// 使用零拷贝消息读取器
-			reader := NewAsyncMessageReader()
-			defer reader.Release()
-
-			for {
-				// 使用缓冲区池读取数据
-				buffer := GetBuffer()
-
-				// 扩展缓冲区以适应可能的大消息
-				if buffer.Cap() < 64*1024 {
-					if err := buffer.Grow(64*1024 - buffer.Cap()); err != nil {
-						buffer.Release()
-						base.Zap().Sugar().Warnf("websocket buffer grow failed: %v", err)
-						return
+			messages, err := reader.FeedData(data)
+			if err != nil {
+				base.Zap().Sugar().Warnf("websocket message parse error: %v", err)
+				return
+			}
+			for i, message := range messages {
+				if !DeliverZeroCopyMessage(proc, peer, message) {
+					for _, remaining := range messages[i+1:] {
+						remaining.Release()
 					}
-				}
-
-				// 读取WebSocket消息到缓冲区
-				n, err := wsPeer.Read(buffer.Data())
-				if err != nil {
-					buffer.Release()
-					base.Zap().Sugar().Infof("websocket read error: %v", err)
+					base.Zap().Sugar().Warnf("websocket message queue full")
 					return
 				}
-
-				if n == 0 {
-					buffer.Release()
-					continue
-				}
-
-				// 投递给零拷贝消息读取器
-				messages, err := reader.FeedData(buffer.Data()[:n])
-				buffer.Release() // 立即释放缓冲区
-
-				if err != nil {
-					base.Zap().Sugar().Warnf("message parse error: %v", err)
-					continue
-				}
-
-				// 处理解析出的零拷贝消息
-				for _, zcMsg := range messages {
-					// 获取消息体数据
-					body := zcMsg.GetBody()
-
-					// 根据处理模式决定是否复制消息体
-					var msgBody []byte
-					if proc.ImmediateMode {
-						// 同步处理模式：可以安全使用零拷贝
-						msgBody = body
-					} else {
-						// 异步处理模式：需要复制消息体
-						msgBody = make([]byte, len(body))
-						copy(msgBody, body)
-					}
-
-					msg := &Message{
-						Peer: peer,
-						Head: zcMsg.Head,
-						Body: msgBody,
-					}
-
-					if proc.ImmediateMode {
-						if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
-							cb(msg)
-						} else if proc.UnHandledHandler != nil {
-							proc.UnHandledHandler(msg)
-						}
-					} else {
-						// 使用select避免channel满时阻塞
-						select {
-						case proc.MessageChan <- msg:
-						default:
-							base.Zap().Sugar().Warnf("websocket message queue full, dropping message")
-						}
-					}
-
-					// 释放零拷贝消息
-					zcMsg.Release()
-				}
 			}
-		}))
+		}
+	}))
 }

@@ -23,7 +23,8 @@ func TestRingBufferConcurrentSafety(t *testing.T) {
 		go func(id int) {
 			defer wg.Done()
 			for j := 0; j < opsPerGoroutine; j++ {
-				data := uintptr(id*opsPerGoroutine + j)
+				data := new(int)
+				*data = id*opsPerGoroutine + j
 				if rb.Push(unsafe.Pointer(data)) {
 					atomic.AddUint64(&pushCount, 1)
 				}
@@ -54,8 +55,8 @@ func TestRingBufferConcurrentSafety(t *testing.T) {
 	t.Logf("Push count: %d, Pop count: %d", pushCount, popCount)
 
 	// 验证：Pop数量不应超过Push数量（之前的bug可能导致数据重复读取）
-	if popCount > pushCount {
-		t.Errorf("Data integrity error: pop count (%d) > push count (%d)", popCount, pushCount)
+	if popCount != pushCount {
+		t.Errorf("Data integrity error: pop count (%d) != push count (%d)", popCount, pushCount)
 	}
 }
 

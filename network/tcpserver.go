@@ -2,6 +2,8 @@ package network
 
 import (
 	"errors"
+	"fmt"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -10,134 +12,178 @@ import (
 	"github.com/liangpengcheng/qcontinuum/base"
 )
 
-// AsyncTCPServer 异步TCP服务器
 type AsyncTCPServer struct {
-	listener     *net.TCPListener
-	reactorPool  *IOReactorPool
-	processor    *Processor
-	fd           int
-	running      int32
-	acceptCount  uint64
-	connCount    uint64
-	wg           sync.WaitGroup  // 跟踪活跃连接
-	shutdown     chan struct{}   // 关闭信号
+	listener    *net.TCPListener
+	reactorPool *IOReactorPool
+	processor   *Processor
+
+	running     int32
+	started     int32
+	acceptCount uint64
+	connCount   uint64
+
+	peers            sync.Map
+	wg               sync.WaitGroup
+	shutdown         chan struct{}
+	stopOnce         sync.Once
+	reactorCloseOnce sync.Once
 }
 
-// NewAsyncTCP4Server 创建异步TCP服务器
 func NewAsyncTCP4Server(bindAddress string) (*AsyncTCPServer, error) {
 	serverAddr, err := net.ResolveTCPAddr("tcp4", bindAddress)
 	if err != nil {
 		return nil, err
 	}
-	
-	listener, err := net.ListenTCP("tcp", serverAddr)
+
+	listener, err := net.ListenTCP("tcp4", serverAddr)
 	if err != nil {
 		return nil, err
 	}
-	
-	// 获取监听socket的文件描述符
-	var fd int
-	if file, err := listener.File(); err == nil {
-		fd = int(file.Fd())
-		// 注意：不要在这里调用 file.Close()，因为它会关闭我们刚刚获取的 fd。
-		// 这个 fd 将通过监听器和 reactor 的生命周期来管理。
-		
-		// 设置非阻塞（仅在支持的平台上）
-		if err := setNonblock(fd); err != nil {
-			listener.Close()
-			return nil, err
-		}
-	} else {
-		// 如果无法获取fd，使用-1作为标记
-		fd = -1
-	}
-	
-	// 创建reactor池
-	reactorPool, err := NewIOReactorPool(0) // 0表示使用CPU核心数
+
+	reactorPool, err := NewIOReactorPool(0)
 	if err != nil {
 		listener.Close()
 		return nil, err
 	}
-	
-	server := &AsyncTCPServer{
+
+	return &AsyncTCPServer{
 		listener:    listener,
 		reactorPool: reactorPool,
-		fd:          fd,
 		shutdown:    make(chan struct{}),
-	}
-	
-	return server, nil
+	}, nil
 }
 
-// SetProcessor 设置消息处理器
 func (s *AsyncTCPServer) SetProcessor(proc *Processor) {
 	s.processor = proc
 }
 
-// StartAsync 启动异步服务器
 func (s *AsyncTCPServer) StartAsync() error {
 	if s.processor == nil {
 		return errors.New("processor not set")
 	}
-	
+	if !atomic.CompareAndSwapInt32(&s.started, 0, 1) {
+		if atomic.LoadInt32(&s.running) == 1 {
+			return errors.New("server already started")
+		}
+		return errors.New("server cannot be restarted")
+	}
+
 	atomic.StoreInt32(&s.running, 1)
-	
-	// 获取一个reactor来处理accept事件
-	reactor := s.reactorPool.GetReactor()
-	
-	// 注册accept处理
-	return reactor.AddFd(s.fd, EpollIn, s)
+	go s.acceptLoop()
+	return nil
 }
 
-// Stop 停止服务器
+func (s *AsyncTCPServer) acceptLoop() {
+	for atomic.LoadInt32(&s.running) == 1 {
+		conn, err := s.listener.AcceptTCP()
+		if err != nil {
+			if atomic.LoadInt32(&s.running) == 0 {
+				return
+			}
+			if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
+				time.Sleep(10 * time.Millisecond)
+				continue
+			}
+			base.Zap().Sugar().Errorf("accept error: %v", err)
+			s.initiateStop()
+			return
+		}
+
+		if err := conn.SetNoDelay(true); err != nil {
+			base.Zap().Sugar().Warnf("set TCP_NODELAY failed: %v", err)
+		}
+		if err := conn.SetKeepAlive(true); err != nil {
+			base.Zap().Sugar().Warnf("set keepalive failed: %v", err)
+		}
+
+		atomic.AddUint64(&s.acceptCount, 1)
+		reactor := s.reactorPool.GetReactor()
+		peer, err := NewAsyncClientPeer(conn, s.processor, reactor)
+		if err != nil {
+			conn.Close()
+			base.Zap().Sugar().Errorf("create peer error: %v", err)
+			continue
+		}
+
+		peer.onClosed = func() {
+			s.peers.Delete(peer)
+			atomic.AddUint64(&s.connCount, ^uint64(0))
+			s.wg.Done()
+		}
+
+		s.wg.Add(1)
+		s.peers.Store(peer, struct{}{})
+		atomic.AddUint64(&s.connCount, 1)
+
+		event := &Event{ID: AddEvent, Peer: &ClientPeer{AsyncClientPeer: peer}}
+		select {
+		case s.processor.EventChan <- event:
+		case <-s.shutdown:
+			peer.Close()
+			return
+		}
+
+		if err := peer.StartAsyncIO(); err != nil {
+			peer.Close()
+			base.Zap().Sugar().Errorf("start async IO error: %v", err)
+			continue
+		}
+	}
+}
+
+func (s *AsyncTCPServer) initiateStop() {
+	s.stopOnce.Do(func() {
+		atomic.StoreInt32(&s.running, 0)
+		close(s.shutdown)
+		if s.listener != nil {
+			s.listener.Close()
+		}
+	})
+}
+
+func (s *AsyncTCPServer) closeAllPeers() {
+	s.peers.Range(func(key, _ interface{}) bool {
+		key.(*AsyncClientPeer).Close()
+		return true
+	})
+}
+
+func (s *AsyncTCPServer) closeReactors() {
+	s.reactorCloseOnce.Do(func() {
+		if s.reactorPool != nil {
+			s.reactorPool.Close()
+		}
+	})
+}
+
 func (s *AsyncTCPServer) Stop() {
-	atomic.StoreInt32(&s.running, 0)
-	
-	// 发送关闭信号
-	close(s.shutdown)
-	
-	if s.listener != nil {
-		s.listener.Close()
-	}
-	
-	if s.reactorPool != nil {
-		s.reactorPool.Close()
-	}
+	s.initiateStop()
+	s.closeAllPeers()
+	s.wg.Wait()
+	s.closeReactors()
 }
 
-// GracefulStop 优雅停止服务器，等待所有连接处理完成
 func (s *AsyncTCPServer) GracefulStop(timeout time.Duration) error {
-	atomic.StoreInt32(&s.running, 0)
-	
-	// 发送关闭信号
-	close(s.shutdown)
-	
-	if s.listener != nil {
-		s.listener.Close()
-	}
-	
-	// 等待所有连接处理完成
+	s.initiateStop()
+
 	done := make(chan struct{})
 	go func() {
 		s.wg.Wait()
 		close(done)
 	}()
-	
+
 	select {
 	case <-done:
-		base.Zap().Sugar().Infof("all connections closed gracefully")
+		s.closeReactors()
+		return nil
 	case <-time.After(timeout):
-		base.Zap().Sugar().Warnf("graceful shutdown timeout after %v", timeout)
+		s.closeAllPeers()
+		s.wg.Wait()
+		s.closeReactors()
+		return fmt.Errorf("graceful shutdown timed out after %v", timeout)
 	}
-	
-	if s.reactorPool != nil {
-		s.reactorPool.Close()
-	}
-	
-	return nil
 }
 
-// IsShutdown 检查服务器是否正在关闭
 func (s *AsyncTCPServer) IsShutdown() bool {
 	select {
 	case <-s.shutdown:
@@ -147,194 +193,89 @@ func (s *AsyncTCPServer) IsShutdown() bool {
 	}
 }
 
-// OnRead 实现AsyncIOHandler接口 - 处理accept事件
-func (s *AsyncTCPServer) OnRead(fd int, data []byte) error {
-	// 对于监听socket，read事件表示有新连接
-	for atomic.LoadInt32(&s.running) == 1 {
-		// 使用非阻塞accept - 在macOS上需要使用标准库
-		conn, err := s.listener.Accept()
-		if err != nil {
-			if netErr, ok := err.(net.Error); ok && netErr.Temporary() {
-				break // 没有更多连接
-			}
-			base.Zap().Sugar().Errorf("accept error: %v", err)
-			return err
-		}
-		
-		// 设置TCP选项
-		if tcpConn, ok := conn.(*net.TCPConn); ok {
-			tcpConn.SetNoDelay(true)
-			tcpConn.SetKeepAlive(true)
-		}
-		
-		// 选择一个reactor处理这个连接
-		reactor := s.reactorPool.GetReactor()
-		
-		// 创建异步peer
-		peer, err := NewAsyncClientPeer(conn, s.processor, reactor)
-		if err != nil {
-			conn.Close()
-			base.Zap().Sugar().Errorf("create peer error: %v", err)
-			continue
-		}
-		
-		// 启动异步I/O
-		if err := peer.StartAsyncIO(); err != nil {
-			peer.Close()
-			base.Zap().Sugar().Errorf("start async IO error: %v", err)
-			continue
-		}
-		
-		// 跟踪活跃连接
-		s.wg.Add(1)
-		
-		// 发送连接事件
-		event := &Event{
-			ID:   AddEvent,
-			Peer: &ClientPeer{AsyncClientPeer: peer},
-		}
-		
-		select {
-		case s.processor.EventChan <- event:
-		default:
-			base.Zap().Sugar().Warnf("event queue full, dropping add event")
-		}
-		
-		atomic.AddUint64(&s.acceptCount, 1)
-		atomic.AddUint64(&s.connCount, 1)
-		
-		base.Zap().Sugar().Debugf("accepted connection from %v", conn.RemoteAddr())
-	}
-	
-	return nil
-}
-
-// OnWrite 实现AsyncIOHandler接口
-func (s *AsyncTCPServer) OnWrite(fd int) error {
-	// 监听socket通常不需要处理写事件
-	return nil
-}
-
-// OnError 实现AsyncIOHandler接口
+// AsyncIOHandler compatibility methods. Listener acceptance is intentionally
+// handled by the dedicated blocking acceptLoop, not by a connection reactor.
+func (s *AsyncTCPServer) OnRead(fd int, data []byte) error { return nil }
+func (s *AsyncTCPServer) OnWrite(fd int) error             { return nil }
 func (s *AsyncTCPServer) OnError(fd int, err error) {
 	base.Zap().Sugar().Errorf("server socket error: %v", err)
 }
+func (s *AsyncTCPServer) OnClose(fd int) {}
 
-// OnClose 实现AsyncIOHandler接口
-func (s *AsyncTCPServer) OnClose(fd int) {
-	base.Zap().Sugar().Infof("server socket closed")
-}
-
-// GetStats 获取服务器统计信息
 func (s *AsyncTCPServer) GetStats() (acceptCount, connCount uint64) {
 	return atomic.LoadUint64(&s.acceptCount), atomic.LoadUint64(&s.connCount)
 }
 
-// ============ 兼容性接口 ============
-
-// Server tcp server (兼容旧接口)
 type Server struct {
 	*AsyncTCPServer
-	Listener *net.TCPListener // 保持兼容性
+	Listener *net.TCPListener
 }
 
-// NewTCP4Server 创建TCP服务器 (兼容旧接口)
 func NewTCP4Server(bindAddress string) (*Server, error) {
 	asyncServer, err := NewAsyncTCP4Server(bindAddress)
 	if err != nil {
 		return nil, err
 	}
-	
-	return &Server{
-		AsyncTCPServer: asyncServer,
-		Listener:       asyncServer.listener,
-	}, nil
+	return &Server{AsyncTCPServer: asyncServer, Listener: asyncServer.listener}, nil
 }
 
-// BlockAccept 阻塞接受连接 (兼容旧接口)
 func (s *Server) BlockAccept(proc *Processor) {
+	if s == nil || s.AsyncTCPServer == nil {
+		base.Zap().Sugar().Error("async server not initialized")
+		return
+	}
 	s.SetProcessor(proc)
-	
 	if err := s.StartAsync(); err != nil {
 		base.Zap().Sugar().Errorf("start async server error: %v", err)
 		return
 	}
-	
-	base.Zap().Sugar().Infof("server started in async mode")
-	
-	// 保持运行直到停止
-	for atomic.LoadInt32(&s.running) == 1 {
-		// 在异步模式下，这里只需要等待
-		// 实际的连接处理由reactor完成
-		select {
-		case <-proc.EventChan:
-			// 处理事件，但不在这里处理，由processor处理
-		default:
-			// 短暂休眠避免CPU占用
-			//time.Sleep(10 * time.Millisecond)
-		}
-	}
+	<-s.shutdown
 }
 
-// BlockAcceptOne 接受一个连接 (兼容旧接口)
 func (s *Server) BlockAcceptOne(proc *Processor) error {
-	if s.AsyncTCPServer == nil {
+	if s == nil || s.AsyncTCPServer == nil {
 		return errors.New("async server not initialized")
 	}
-	
-	// 在异步模式下，这个方法的行为有所不同
-	// 我们设置processor并启动异步接受，然后等待第一个连接
 	s.SetProcessor(proc)
-	
-	if atomic.LoadInt32(&s.running) == 0 {
+	if atomic.LoadInt32(&s.started) == 0 {
 		if err := s.StartAsync(); err != nil {
 			return err
 		}
 	}
-	
-	// 等待连接计数增加
-	initialCount := atomic.LoadUint64(&s.connCount)
-	for atomic.LoadUint64(&s.connCount) == initialCount {
-		if atomic.LoadInt32(&s.running) == 0 {
+
+	initialCount := atomic.LoadUint64(&s.acceptCount)
+	ticker := time.NewTicker(time.Millisecond)
+	defer ticker.Stop()
+
+	for atomic.LoadUint64(&s.acceptCount) == initialCount {
+		select {
+		case <-s.shutdown:
 			return errors.New("server stopped")
+		case <-ticker.C:
 		}
-		// 短暂等待
-		//time.Sleep(1 * time.Millisecond)
 	}
-	
 	return nil
 }
 
-// ReadMessage 读取消息 (兼容旧接口)
 func ReadMessage(conn net.Conn) (*MessageHead, []byte, error) {
-	// 先读取消息头
 	headerBuf := make([]byte, 8)
-	_, err := conn.Read(headerBuf)
-	if err != nil {
+	if _, err := io.ReadFull(conn, headerBuf); err != nil {
 		return nil, nil, err
 	}
-	
+
 	head, err := ReadHeadFromBuffer(headerBuf)
 	if err != nil {
 		return nil, nil, err
 	}
-	
-	// 验证消息长度
 	if head.ID > 10000000 || head.Length < 0 || head.Length > int32(maxMessageLength) {
-		base.Zap().Sugar().Warnf("message error: id(%d),len(%d)", head.ID, head.Length)
-		return nil, nil, errors.New("message not in range")
+		return nil, nil, fmt.Errorf("message not in range: id=%d len=%d", head.ID, head.Length)
 	}
-	
-	// 读取消息体
-	if head.Length == 0 {
-		return &head, []byte{}, nil
+
+	bodyBuf := make([]byte, int(head.Length))
+	if len(bodyBuf) > 0 {
+		if _, err := io.ReadFull(conn, bodyBuf); err != nil {
+			return nil, nil, err
+		}
 	}
-	
-	bodyBuf := make([]byte, head.Length)
-	_, err = conn.Read(bodyBuf)
-	if err != nil {
-		return nil, nil, err
-	}
-	
 	return &head, bodyBuf, nil
 }

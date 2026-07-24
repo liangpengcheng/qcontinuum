@@ -1,10 +1,10 @@
 package ginhttp
 
 import (
-	"errors"
 	"io"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,124 +16,110 @@ import (
 type WebSocketPeer struct {
 	Connection *websocket.Conn
 	IOReader   io.Reader
+	readMu     sync.Mutex
+	writeMu    sync.Mutex
 }
 
-func (ws *WebSocketPeer) Write(data []byte) (n int, err error) {
-	return len(data), ws.Connection.WriteMessage(websocket.BinaryMessage, data)
+func (ws *WebSocketPeer) Write(data []byte) (int, error) {
+	ws.writeMu.Lock()
+	defer ws.writeMu.Unlock()
+	if err := ws.Connection.WriteMessage(websocket.BinaryMessage, data); err != nil {
+		return 0, err
+	}
+	return len(data), nil
 }
-func (ws *WebSocketPeer) Read(msg []byte) (n int, err error) {
 
-	n, err = io.ReadAtLeast(ws.IOReader, msg, len(msg))
+func (ws *WebSocketPeer) Read(data []byte) (int, error) {
+	ws.readMu.Lock()
+	defer ws.readMu.Unlock()
 
-	if err == nil {
-		return
-	} else {
-		return 0, errors.New("can't deal this kind  of message")
+	for {
+		if ws.IOReader == nil {
+			messageType, reader, err := ws.Connection.NextReader()
+			if err != nil {
+				return 0, err
+			}
+			if messageType != websocket.BinaryMessage {
+				_, _ = io.Copy(io.Discard, reader)
+				continue
+			}
+			ws.IOReader = reader
+		}
+
+		n, err := ws.IOReader.Read(data)
+		if err == io.EOF {
+			ws.IOReader = nil
+			if n > 0 {
+				return n, nil
+			}
+			continue
+		}
+		return n, err
 	}
 }
 
-func (ws *WebSocketPeer) Close() error {
-	return ws.Connection.Close()
-}
-func (ws *WebSocketPeer) LocalAddr() net.Addr {
-	return ws.Connection.LocalAddr()
-}
-func (ws *WebSocketPeer) RemoteAddr() net.Addr {
-	return ws.Connection.RemoteAddr()
-}
-
-// SetDeadline sets the connection's network read & write deadlines.
+func (ws *WebSocketPeer) Close() error         { return ws.Connection.Close() }
+func (ws *WebSocketPeer) LocalAddr() net.Addr  { return ws.Connection.LocalAddr() }
+func (ws *WebSocketPeer) RemoteAddr() net.Addr { return ws.Connection.RemoteAddr() }
 func (ws *WebSocketPeer) SetDeadline(t time.Time) error {
-	ws.Connection.SetReadDeadline(t)
+	if err := ws.Connection.SetReadDeadline(t); err != nil {
+		return err
+	}
 	return ws.Connection.SetWriteDeadline(t)
 }
-
-// SetReadDeadline sets the connection's network read deadline.
-func (ws *WebSocketPeer) SetReadDeadline(t time.Time) error {
-	return ws.Connection.SetReadDeadline(t)
-}
-
-// SetWriteDeadline sets the connection's network write deadline.
+func (ws *WebSocketPeer) SetReadDeadline(t time.Time) error { return ws.Connection.SetReadDeadline(t) }
 func (ws *WebSocketPeer) SetWriteDeadline(t time.Time) error {
 	return ws.Connection.SetWriteDeadline(t)
 }
 
 func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
+	upgrader := websocket.Upgrader{
+		CheckOrigin: func(r *http.Request) bool { return true },
+	}
 
-	var upgrader = websocket.Upgrader{
-		// 解决跨域问题
-		CheckOrigin: func(r *http.Request) bool {
-			return true
-		},
-	} // use default options
 	router.GET("/ws", func(c *gin.Context) {
 		ws, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
-			base.Zap().Sugar().Errorf("upgrade:", err)
+			base.Zap().Sugar().Errorf("websocket upgrade failed: %v", err)
 			return
 		}
-		defer ws.Close()
-		base.Zap().Sugar().Infof("new webclient connected :%s", ws.RemoteAddr().String())
-		wsConnection := &WebSocketPeer{
-			Connection: ws,
-		}
 
-		// 为WebSocket创建专用的peer
-		peer := network.NewWebSocketClientPeer(wsConnection, proc)
-
-		event := &network.Event{
-			ID:   network.AddEvent,
-			Peer: peer,
+		peer := network.NewWebSocketClientPeer(&WebSocketPeer{Connection: ws}, proc)
+		if proc == nil || !proc.TryPostEvent(&network.Event{ID: network.AddEvent, Peer: peer}) {
+			peer.Close()
+			return
 		}
 		defer func() {
-			leaveEvent := &network.Event{
-				ID:   network.RemoveEvent,
-				Peer: peer,
+			peer.Close()
+			if !proc.TryPostEvent(&network.Event{ID: network.RemoveEvent, Peer: peer}) {
+				base.Zap().Sugar().Warnf("websocket remove event queue full")
 			}
-			proc.EventChan <- leaveEvent
 		}()
-		proc.EventChan <- event
 
-		// 使用零拷贝消息读取器
 		reader := network.NewAsyncMessageReader()
 		defer reader.Release()
 
-		// 替换当前的NextReader方式
 		for {
-			messageType, messageData, err := ws.ReadMessage()
+			messageType, data, err := ws.ReadMessage()
 			if err != nil {
-				base.Zap().Sugar().Errorf("websocket read error: %v", err)
 				return
 			}
+			if messageType != websocket.BinaryMessage {
+				continue
+			}
 
-			if messageType == websocket.BinaryMessage {
-				// 直接投递完整消息给FeedData
-				messages, err := reader.FeedData(messageData)
-				if err != nil {
-					base.Zap().Sugar().Warnf("message parse error: %v", err)
-					continue
-				}
-
-				// 处理解析出的零拷贝消息
-				for _, zcMsg := range messages {
-					msg := &network.Message{
-						Peer: peer,
-						Head: zcMsg.Head,
-						Body: zcMsg.GetBody(), // 零拷贝获取消息体
+			messages, err := reader.FeedData(data)
+			if err != nil {
+				base.Zap().Sugar().Warnf("websocket message parse error: %v", err)
+				return
+			}
+			for i, message := range messages {
+				if !network.DeliverZeroCopyMessage(proc, peer, message) {
+					for _, remaining := range messages[i+1:] {
+						remaining.Release()
 					}
-
-					if proc.ImmediateMode {
-						if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
-							cb(msg)
-						} else if proc.UnHandledHandler != nil {
-							proc.UnHandledHandler(msg)
-						}
-					} else {
-						proc.MessageChan <- msg
-					}
-
-					// 释放零拷贝消息
-					zcMsg.Release()
+					base.Zap().Sugar().Warnf("websocket message queue full")
+					return
 				}
 			}
 		}

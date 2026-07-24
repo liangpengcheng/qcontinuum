@@ -36,15 +36,17 @@ func (ProtobufCodec) Unmarshal(data []byte, v interface{}) error {
 // 使用atomic.Value确保线程安全
 var globalDefaultCodec atomic.Value
 
+type codecHolder struct{ codec Codec }
+
 func init() {
-	globalDefaultCodec.Store(Codec(ProtobufCodec{}))
+	globalDefaultCodec.Store(codecHolder{codec: ProtobufCodec{}})
 }
 
 // SetDefaultCodec sets the package-wide default codec used when none is specified.
 // This function is thread-safe.
 func SetDefaultCodec(c Codec) {
 	if c != nil {
-		globalDefaultCodec.Store(c)
+		globalDefaultCodec.Store(codecHolder{codec: c})
 	}
 }
 
@@ -52,7 +54,7 @@ func SetDefaultCodec(c Codec) {
 // This function is thread-safe.
 func DefaultCodec() Codec {
 	if c := globalDefaultCodec.Load(); c != nil {
-		return c.(Codec)
+		return c.(codecHolder).codec
 	}
 	return ProtobufCodec{}
 }

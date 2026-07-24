@@ -39,9 +39,11 @@ type AsyncClientPeer struct {
 	procPtr      unsafe.Pointer // *Processor, 原子访问的处理器指针
 
 	// 异步I/O组件
-	reader  *AsyncMessageReader
-	writer  *ZeroCopyMessageWriter
-	reactor *EpollReactor
+	reader      *AsyncMessageReader
+	writer      *ZeroCopyMessageWriter
+	reactor     *EpollReactor
+	onClosed    func()
+	ownsReactor bool
 
 	// 可插拔编解码器（默认protobuf），仅用于新的通用接口
 	codec Codec
@@ -74,14 +76,14 @@ func NewWebSocketClientPeer(conn net.Conn, proc *Processor) *ClientPeer {
 // NewAsyncClientPeer 创建异步客户端peer
 func NewAsyncClientPeer(conn net.Conn, proc *Processor, reactor *EpollReactor) (*AsyncClientPeer, error) {
 	// 获取文件描述符
-	var fd int
+	fd := -1
 
-	if tcpConn, ok := conn.(*net.TCPConn); ok {
-		file, fileErr := tcpConn.File()
-		if fileErr != nil {
-			return nil, fileErr
+	if _, ok := conn.(*net.TCPConn); ok {
+		var fdErr error
+		fd, fdErr = socketFD(conn)
+		if fdErr != nil {
+			return nil, fdErr
 		}
-		fd = int(file.Fd())
 		// 注意：不要调用 file.Close()，否则 FD 会失效
 	} else {
 		// 对于非TCP连接，使用虚拟fd
@@ -125,70 +127,26 @@ func (peer *AsyncClientPeer) setState(state PeerState) {
 }
 
 // CheckAfter 超时检查
-func (peer *AsyncClientPeer) CheckAfter(t time.Duration) {
-	go func() {
-		time.AfterFunc(t, func() {
-			if peer.Proc != nil && peer.ID == 0 {
-				peer.Proc.FuncChan <- func() {
-					base.Zap().Sugar().Warnf("auth timeout %v", peer.Connection)
-					peer.Close()
-				}
-			}
-		})
-	}()
-}
 
 // Close 关闭连接
-func (peer *AsyncClientPeer) Close() {
-	if !atomic.CompareAndSwapInt32(&peer.state, int32(PeerStateConnected), int32(PeerStateClosing)) {
-		return // 已经在关闭或已关闭
-	}
 
-	// 从reactor移除
-	if peer.reactor != nil && peer.FD != -1 {
-		peer.reactor.RemoveFd(peer.FD)
-	}
+// 已经在关闭或已关闭
 
-	// 清理连接映射（macOS）
-	if peer.FD != -1 {
-		removeConnFromFd(peer.FD)
-	}
+// 从reactor移除
 
-	// 关闭连接
-	if peer.Connection != nil {
-		peer.Connection.Close()
-		peer.Connection = nil
-	}
+// 清理连接映射（macOS）
 
-	// 释放资源
-	if peer.reader != nil {
-		peer.reader.Release()
-		peer.reader = nil
-	}
+// 关闭连接
 
-	if peer.writer != nil {
-		// 清空写入队列中的缓冲区
-		for {
-			ptr := peer.writer.writeQueue.Pop()
-			if ptr == nil {
-				break
-			}
-			req := (*writeRequest)(ptr)
-			if req.buffer != nil {
-				req.buffer.Release()
-			}
-		}
-		peer.writer = nil
-	}
+// 释放资源
 
-	atomic.StoreInt32(&peer.state, int32(PeerStateClosed))
-}
+// 清空写入队列中的缓冲区
 
 // pushToWriteQueueWithTimeout 带超时的写队列推送
 // 成功返回 true，超时返回 false
 func (peer *AsyncClientPeer) pushToWriteQueueWithTimeout(req *writeRequest) bool {
 	// 快速路径：直接尝试推送
-	if peer.writer.writeQueue.Push(unsafe.Pointer(req)) {
+	if peer.writer.enqueue(req) {
 		return true
 	}
 
@@ -211,7 +169,7 @@ func (peer *AsyncClientPeer) pushToWriteQueueWithTimeout(req *writeRequest) bool
 		time.Sleep(sendRetryDelay)
 		retries++
 
-		if peer.writer.writeQueue.Push(unsafe.Pointer(req)) {
+		if peer.writer.enqueue(req) {
 			if retries > 10 {
 				// 记录慢速发送
 				base.Zap().Sugar().Debugf("slow send detected: retries=%d, queue_size=%d",
@@ -275,6 +233,9 @@ func (peer *AsyncClientPeer) SendMessage(msg proto.Message, msgid int32) error {
 	data, err := proto.Marshal(msg)
 	if err != nil {
 		return err
+	}
+	if len(data) > maxMessageLength {
+		return ErrBufferTooLarge
 	}
 
 	// 创建带头部的完整消息
@@ -373,6 +334,12 @@ func (peer *AsyncClientPeer) TransmitMsg(msg *Message) error {
 	if peer.GetState() != PeerStateConnected {
 		return errors.New("connection is not connected")
 	}
+	if msg == nil || msg.Head.Length < 0 || int(msg.Head.Length) != len(msg.Body) {
+		return errors.New("message head length does not match body")
+	}
+	if len(msg.Body) > maxMessageLength {
+		return ErrBufferTooLarge
+	}
 
 	// 创建完整消息缓冲区
 	buffer := GetBuffer()
@@ -454,6 +421,9 @@ func (peer *AsyncClientPeer) SendWithCodec(v interface{}, msgid int32, codec Cod
 		return err
 	}
 
+	if len(body) > maxMessageLength {
+		return ErrBufferTooLarge
+	}
 	// 创建带头部的完整消息
 	buffer := GetBuffer()
 	totalLen := len(body) + 8
@@ -501,7 +471,7 @@ func (peer *AsyncClientPeer) SendWithCodec(v interface{}, msgid int32, codec Cod
 // StartAsyncIO 开始异步I/O处理
 func (peer *AsyncClientPeer) StartAsyncIO() error {
 	// 将peer注册到reactor
-	return peer.reactor.AddFd(peer.FD, EpollIn|EpollOut|EpollET, peer)
+	return peer.startReactorIO()
 }
 
 // OnRead 实现AsyncIOHandler接口 - 处理读事件
@@ -523,7 +493,14 @@ func (peer *AsyncClientPeer) OnRead(fd int, data []byte) error {
 
 	// 处理解析出的消息
 	proc := peer.getProcessor()
-	for _, zcMsg := range messages {
+	for i, zcMsg := range messages {
+		if proc == nil {
+			for _, msg := range messages {
+				msg.Release()
+			}
+			peer.Close()
+			return errors.New("processor is nil")
+		}
 		// 获取消息体数据
 		body := zcMsg.GetBody()
 
@@ -548,16 +525,15 @@ func (peer *AsyncClientPeer) OnRead(fd int, data []byte) error {
 
 		// 处理消息
 		if proc.ImmediateMode {
-			if cb, ok := proc.CallbackMap[msg.Head.ID]; ok {
-				cb(msg)
-			} else if proc.UnHandledHandler != nil {
-				proc.UnHandledHandler(msg)
-			}
+			proc.DispatchMessage(msg)
 		} else {
-			select {
-			case proc.MessageChan <- msg:
-			default:
-				base.Zap().Sugar().Warnf("message queue full, dropping message")
+			if !proc.TryEnqueueMessage(msg) {
+				zcMsg.Release()
+				for _, remaining := range messages[i+1:] {
+					remaining.Release()
+				}
+				peer.Close()
+				return errors.New("message queue full")
 			}
 		}
 
@@ -575,64 +551,22 @@ func (peer *AsyncClientPeer) OnRead(fd int, data []byte) error {
 // OnWrite 实现AsyncIOHandler接口 - 处理写事件
 func (peer *AsyncClientPeer) OnWrite(fd int) error {
 	// 写事件由writer内部处理
-	peer.writer.tryAsyncWrite()
-	return nil
+	return peer.writer.notifyWritable()
 }
 
 // OnError 实现AsyncIOHandler接口 - 处理错误事件
-func (peer *AsyncClientPeer) OnError(fd int, err error) {
-	base.Zap().Sugar().Warnf("peer error on fd %d: %v", fd, err)
 
-	// 安全关闭连接
-	if peer.GetState() == PeerStateConnected {
-		peer.Close()
+// 安全关闭连接
 
-		// 发送移除事件
-		event := &Event{
-			ID:   RemoveEvent,
-			Peer: &ClientPeer{AsyncClientPeer: peer},
-		}
-
-		proc := peer.getProcessor()
-		if proc != nil {
-			select {
-			case proc.EventChan <- event:
-			default:
-				base.Zap().Sugar().Errorf("event queue full when handling error, dropping remove event")
-			}
-		}
-	}
-}
+// 发送移除事件
 
 // OnClose 实现AsyncIOHandler接口 - 处理关闭事件
-func (peer *AsyncClientPeer) OnClose(fd int) {
-	base.Zap().Sugar().Infof("peer connection closed on fd %d", fd)
 
-	// 获取最终统计信息
-	bytesRead, bytesWritten, lastActive := peer.GetStats()
-	base.Zap().Sugar().Debugf("connection stats: read=%d, written=%d, last_active=%v",
-		bytesRead, bytesWritten, lastActive)
+// 获取最终统计信息
 
-	// 安全关闭连接
-	if peer.GetState() != PeerStateClosed {
-		peer.Close()
+// 安全关闭连接
 
-		// 发送移除事件
-		event := &Event{
-			ID:   RemoveEvent,
-			Peer: &ClientPeer{AsyncClientPeer: peer},
-		}
-
-		proc := peer.getProcessor()
-		if proc != nil {
-			select {
-			case proc.EventChan <- event:
-			default:
-				base.Zap().Sugar().Errorf("event queue full when handling close, dropping remove event")
-			}
-		}
-	}
-}
+// 发送移除事件
 
 // GetStats 获取统计信息
 func (peer *AsyncClientPeer) GetStats() (bytesRead, bytesWritten uint64, lastActive time.Time) {
@@ -668,6 +602,7 @@ func NewTcpConnection(address string, proc *Processor) (client *ClientPeer, err 
 		return nil, err
 	}
 
+	asyncPeer.ownsReactor = true
 	client = &ClientPeer{
 		AsyncClientPeer: asyncPeer,
 	}
