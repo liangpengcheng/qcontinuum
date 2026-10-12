@@ -65,6 +65,34 @@ New-Item -ItemType Directory -Path .\generated\csharp -Force | Out-Null
 
 Windows 官方编译器在当前系统上无法识别含中文的目录路径。协议、工具和输出目录请使用 ASCII 路径；带空格路径已验证可用。
 
+## Linux 工具链（`tools/protobuf/linux/`）
+
+与 `win/` 对等的 Linux x64 工具链：
+
+| 工具 | 版本 | 用途 |
+| --- | --- | --- |
+| `linux/protoc` | 36.2，Linux x64 | 解析 `.proto`，内置 C# 生成器 |
+| `linux/protoc-gen-go` | v1.36.12，Linux x64 | 生成使用 `google.golang.org/protobuf` 的 Go 代码 |
+| `linux/include` | 来自 protoc 36.2 官方发布包 | `google/protobuf/*.proto` 标准定义 |
+
+C# 生成器同样内置于 `protoc`，使用 `--csharp_out` 即可。C# 工程需要引用 **Google.Protobuf 3.36.2**。
+
+从仓库根目录执行生成脚本（已验证）：
+
+```bash
+./tools/protobuf/linux/generate-go.sh      # -> generated/go
+./tools/protobuf/linux/generate-csharp.sh  # -> generated/csharp
+```
+
+`protoc-gen-go` 由官方模块源码构建（与 go.mod 的 protobuf 运行时版本一致）：
+
+```bash
+GOOS=linux GOARCH=amd64 CGO_ENABLED=0 \
+go build -mod=readonly -trimpath -ldflags='-s -w' \
+    -o ./tools/protobuf/linux/protoc-gen-go \
+    google.golang.org/protobuf/cmd/protoc-gen-go
+```
+
 ## 来源与重建
 
 - [protoc 36.2 官方发布](https://github.com/protocolbuffers/protobuf/releases/tag/v36.2)
