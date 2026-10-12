@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -78,7 +79,7 @@ func testBufferSafety() {
 	buffer2 := network.GetBuffer()
 	defer buffer2.Release()
 
-	err = buffer2.Grow(2 * 1024 * 1024) // 2MB > 1MB limit
+	err = buffer2.Grow(101 * 1024 * 1024) // Exceeds the 100MB message limit.
 	if err != nil {
 		fmt.Printf("✅ 正确拒绝超大扩展: %v\n", err)
 	} else {
@@ -107,28 +108,35 @@ func testRingBuffer() {
 	rb := network.NewRingBuffer(1024)
 	const testCount = 50000
 	var pushCount, popCount uint64
+	values := make([]int, testCount)
+	var workers sync.WaitGroup
+	workers.Add(2)
 
 	start := time.Now()
 
 	// 并发测试
 	go func() {
+		defer workers.Done()
 		for i := 0; i < testCount; i++ {
-			data := uintptr(i)
-			if rb.Push(unsafe.Pointer(data)) {
-				atomic.AddUint64(&pushCount, 1)
+			values[i] = i
+			for !rb.Push(unsafe.Pointer(&values[i])) {
+				runtime.Gosched()
 			}
+			atomic.AddUint64(&pushCount, 1)
 		}
 	}()
 
 	go func() {
+		defer workers.Done()
 		for i := 0; i < testCount; i++ {
-			if rb.Pop() != nil {
-				atomic.AddUint64(&popCount, 1)
+			for rb.Pop() == nil {
+				runtime.Gosched()
 			}
+			atomic.AddUint64(&popCount, 1)
 		}
 	}()
 
-	time.Sleep(100 * time.Millisecond)
+	workers.Wait()
 	duration := time.Since(start)
 
 	fmt.Printf("环形缓冲区测试: Push:%d, Pop:%d, 耗时: %v\n",

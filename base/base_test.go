@@ -1,8 +1,8 @@
 package base
 
 import (
-	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,19 +11,23 @@ import (
 
 // 模拟测试环境并验证日志文件生成和写入
 func TestLogInitialization(t *testing.T) {
-	// 创建一个临时目录，模拟日志目录
-	tmpDir, err := ioutil.TempDir("", "log_test")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %s", err)
+	// Run initialization in a child process to isolate flags, the global logger,
+	// and the daily rotation goroutine from other tests.
+	if os.Getenv("QCONTINUUM_LOG_TEST_CHILD") == "1" {
+		InitZap()
+		Zap().Info("Test log entry")
+		if err := Zap().Sync(); err != nil {
+			t.Fatal(err)
+		}
+		return
 	}
-	defer os.RemoveAll(tmpDir) // 测试结束后删除临时目录
+	tmpDir := t.TempDir()
+	cmd := exec.Command(os.Args[0], "-test.run=^TestLogInitialization$", "-logpath", tmpDir)
+	cmd.Env = append(os.Environ(), "QCONTINUUM_LOG_TEST_CHILD=1")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("Log initialization failed: %v\n%s", err, output)
+	}
 
-	// 模拟将 logpath 指向临时目录
-	os.Args = []string{"cmd", "-logpath", tmpDir}
-
-	// 调用 init() 函数，初始化日志
-	init_zap()
-	// 检查日志文件是否按照预期生成
 	currentDate := time.Now().Format("2006-01-02")
 	logFileName := "log-" + currentDate + ".log"
 	logFilePath := filepath.Join(tmpDir, logFileName)
@@ -33,11 +37,8 @@ func TestLogInitialization(t *testing.T) {
 		t.Fatalf("Log file was not created: %s", logFilePath)
 	}
 
-	// 写入测试日志
-	zp.Info("Test log entry")
-
 	// 读取日志文件内容
-	logContent, err := ioutil.ReadFile(logFilePath)
+	logContent, err := os.ReadFile(logFilePath)
 	if err != nil {
 		t.Fatalf("Failed to read log file: %s", err)
 	}

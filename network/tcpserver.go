@@ -24,6 +24,8 @@ type AsyncTCPServer struct {
 
 	peers            sync.Map
 	wg               sync.WaitGroup
+	acceptWG         sync.WaitGroup
+	lifecycleMu      sync.Mutex
 	shutdown         chan struct{}
 	stopOnce         sync.Once
 	reactorCloseOnce sync.Once
@@ -58,6 +60,11 @@ func (s *AsyncTCPServer) SetProcessor(proc *Processor) {
 }
 
 func (s *AsyncTCPServer) StartAsync() error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	if s.IsShutdown() {
+		return errors.New("server is stopped")
+	}
 	if s.processor == nil {
 		return errors.New("processor not set")
 	}
@@ -69,11 +76,13 @@ func (s *AsyncTCPServer) StartAsync() error {
 	}
 
 	atomic.StoreInt32(&s.running, 1)
+	s.acceptWG.Add(1)
 	go s.acceptLoop()
 	return nil
 }
 
 func (s *AsyncTCPServer) acceptLoop() {
+	defer s.acceptWG.Done()
 	for atomic.LoadInt32(&s.running) == 1 {
 		conn, err := s.listener.AcceptTCP()
 		if err != nil {
@@ -89,6 +98,10 @@ func (s *AsyncTCPServer) acceptLoop() {
 			return
 		}
 
+		if atomic.LoadInt32(&s.running) == 0 {
+			conn.Close()
+			return
+		}
 		if err := conn.SetNoDelay(true); err != nil {
 			base.Zap().Sugar().Warnf("set TCP_NODELAY failed: %v", err)
 		}
@@ -115,7 +128,7 @@ func (s *AsyncTCPServer) acceptLoop() {
 		s.peers.Store(peer, struct{}{})
 		atomic.AddUint64(&s.connCount, 1)
 
-		event := &Event{ID: AddEvent, Peer: &ClientPeer{AsyncClientPeer: peer}}
+		event := &Event{ID: AddEvent, Peer: peer.ToClientPeer()}
 		select {
 		case s.processor.EventChan <- event:
 		case <-s.shutdown:
@@ -132,6 +145,8 @@ func (s *AsyncTCPServer) acceptLoop() {
 }
 
 func (s *AsyncTCPServer) initiateStop() {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
 	s.stopOnce.Do(func() {
 		atomic.StoreInt32(&s.running, 0)
 		close(s.shutdown)
@@ -158,6 +173,7 @@ func (s *AsyncTCPServer) closeReactors() {
 
 func (s *AsyncTCPServer) Stop() {
 	s.initiateStop()
+	s.acceptWG.Wait()
 	s.closeAllPeers()
 	s.wg.Wait()
 	s.closeReactors()
@@ -165,6 +181,7 @@ func (s *AsyncTCPServer) Stop() {
 
 func (s *AsyncTCPServer) GracefulStop(timeout time.Duration) error {
 	s.initiateStop()
+	s.acceptWG.Wait()
 
 	done := make(chan struct{})
 	go func() {

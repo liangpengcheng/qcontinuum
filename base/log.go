@@ -62,9 +62,9 @@ func CloseLogFile() {
 func _logFormat(prefix string, format string, v ...interface{}) {
 	s := fmt.Sprintf(logHead+prefix+format, v...)
 	if logger != nil {
-		logger.Printf(s)
+		logger.Print(s)
 	}
-	consoleLog(s)
+	consoleLog("%s", s)
 }
 func InitLog(system string) {
 	logHead = textColor(TextMagenta, "["+system+"]:")

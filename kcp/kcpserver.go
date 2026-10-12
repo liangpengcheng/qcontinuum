@@ -1,7 +1,6 @@
 package kcp
 
 import (
-	"encoding/binary"
 	"errors"
 	"net"
 	"sync"
@@ -146,186 +145,71 @@ const (
 	KCPPeerStateClosed
 )
 
-// KCPPeer KCP专用的peer实现
-type KCPPeer struct {
-	conn       *_kcp.UDPSession
-	proc       *network.Processor
-	ID         int64
-	Flag       int32
-	state      int32
-	lastActive int64
-
-	// 统计信息
-	bytesRead    uint64
-	bytesWritten uint64
-
-	// 缓存的ClientPeer，避免重复创建
-	clientPeerOnce sync.Once
-	clientPeer     *network.ClientPeer
-}
+// KCPPeer shares the underlying connection fields with AsyncClientPeer. The
+// identical underlying struct permits pointer conversion without copying state,
+// while keeping ID and Flag as declared fields for existing keyed literals.
+type KCPPeer network.AsyncClientPeer
 
 // NewKCPPeer 创建KCP peer
 func NewKCPPeer(conn *_kcp.UDPSession, proc *network.Processor) *KCPPeer {
-	return &KCPPeer{
-		conn:       conn,
-		proc:       proc,
-		state:      int32(KCPPeerStateConnected),
-		lastActive: time.Now().Unix(),
-	}
+	peer := network.NewStreamClientPeer(&kcpConnWrapper{conn: conn, lastActive: time.Now().Unix()}, proc)
+	return (*KCPPeer)(peer.AsyncClientPeer)
 }
 
 // GetState 获取peer状态
 func (p *KCPPeer) GetState() KCPPeerState {
-	return KCPPeerState(atomic.LoadInt32(&p.state))
+	return KCPPeerState((*network.AsyncClientPeer)(p).GetState())
 }
 
 // Close 关闭连接
 func (p *KCPPeer) Close() {
-	if !atomic.CompareAndSwapInt32(&p.state, int32(KCPPeerStateConnected), int32(KCPPeerStateClosing)) {
-		return
-	}
-
-	if p.conn != nil {
-		p.conn.Close()
-	}
-
-	atomic.StoreInt32(&p.state, int32(KCPPeerStateClosed))
+	(*network.AsyncClientPeer)(p).Close()
 }
 
 // SendMessage 发送protobuf消息
 func (p *KCPPeer) SendMessage(msg proto.Message, msgid int32) error {
-	if p.GetState() != KCPPeerStateConnected {
-		return errors.New("connection is not connected")
-	}
-
-	data, err := proto.Marshal(msg)
-	if err != nil {
-		return err
-	}
-
-	if len(data) > maxKCPMessageLength {
-		return errors.New("message too large")
-	}
-	// 创建完整消息（头部+数据）
-	totalLen := len(data) + 8
-	buffer := make([]byte, totalLen)
-
-	// 写入头部（使用小端字节序）
-	binary.LittleEndian.PutUint32(buffer[0:4], uint32(len(data)))
-	binary.LittleEndian.PutUint32(buffer[4:8], uint32(msgid))
-
-	// 写入消息体
-	copy(buffer[8:], data)
-
-	// 发送
-	n, err := p.conn.Write(buffer)
-	if err != nil {
-		return err
-	}
-	atomic.AddUint64(&p.bytesWritten, uint64(n))
-
-	return nil
+	return (*network.AsyncClientPeer)(p).SendMessage(msg, msgid)
 }
 
 // SendMessageBuffer 发送原始数据
 func (p *KCPPeer) SendMessageBuffer(data []byte) error {
-	if p.GetState() != KCPPeerStateConnected {
-		return errors.New("connection is not connected")
-	}
 	if len(data) > maxKCPMessageLength+8 {
 		return errors.New("message too large")
 	}
-
-	n, err := p.conn.Write(data)
-	if err != nil {
-		return err
-	}
-	atomic.AddUint64(&p.bytesWritten, uint64(n))
-	return nil
+	return (*network.AsyncClientPeer)(p).SendMessageBuffer(data)
 }
 
 // TransmitMsg 转发消息
 func (p *KCPPeer) TransmitMsg(msg *network.Message) error {
-	if p.GetState() != KCPPeerStateConnected {
-		return errors.New("connection is not connected")
-	}
-	if msg == nil || msg.Head.Length < 0 || int(msg.Head.Length) != len(msg.Body) {
-		return errors.New("message head length does not match body")
-	}
-	if len(msg.Body) > maxKCPMessageLength {
-		return errors.New("message too large")
-	}
-
-	// 创建完整消息
-	totalLen := int(msg.Head.Length) + 8
-	buffer := make([]byte, totalLen)
-
-	// 写入头部（使用小端字节序）
-	binary.LittleEndian.PutUint32(buffer[0:4], uint32(msg.Head.Length))
-	binary.LittleEndian.PutUint32(buffer[4:8], uint32(msg.Head.ID))
-
-	// 写入消息体
-	copy(buffer[8:], msg.Body)
-
-	n, err := p.conn.Write(buffer)
-	if err != nil {
-		return err
-	}
-	atomic.AddUint64(&p.bytesWritten, uint64(n))
-	return nil
+	return (*network.AsyncClientPeer)(p).TransmitMsg(msg)
 }
 
 // RemoteAddr 返回远程地址
 func (p *KCPPeer) RemoteAddr() net.Addr {
-	if p.conn != nil {
-		return p.conn.RemoteAddr()
+	if p.Connection != nil {
+		return p.Connection.RemoteAddr()
 	}
 	return nil
 }
 
 // GetStats 获取统计信息
 func (p *KCPPeer) GetStats() (bytesRead, bytesWritten uint64, lastActive time.Time) {
-	return atomic.LoadUint64(&p.bytesRead),
-		atomic.LoadUint64(&p.bytesWritten),
-		time.Unix(atomic.LoadInt64(&p.lastActive), 0)
+	if conn, ok := p.Connection.(*kcpConnWrapper); ok {
+		return atomic.LoadUint64(&conn.bytesRead), atomic.LoadUint64(&conn.bytesWritten),
+			time.Unix(atomic.LoadInt64(&conn.lastActive), 0)
+	}
+	return (*network.AsyncClientPeer)(p).GetStats()
 }
 
 // CheckAfter 超时检查
 func (p *KCPPeer) CheckAfter(t time.Duration) {
-	go func() {
-		time.AfterFunc(t, func() {
-			if p.proc != nil && p.ID == 0 {
-				p.proc.FuncChan <- func() {
-					base.Zap().Sugar().Warnf("kcp auth timeout %v", p.RemoteAddr())
-					p.Close()
-				}
-			}
-		})
-	}()
+	(*network.AsyncClientPeer)(p).CheckAfter(t)
 }
 
 // ToClientPeer 转换为兼容的ClientPeer（用于消息处理）
-// 使用sync.Once缓存，避免每次消息处理都创建新对象
+// Returns the same shared peer without copying mutable business state.
 func (p *KCPPeer) ToClientPeer() *network.ClientPeer {
-	p.clientPeerOnce.Do(func() {
-		// 创建一个兼容的AsyncClientPeer包装
-		asyncPeer := &network.AsyncClientPeer{
-			Connection: &kcpConnWrapper{conn: p.conn},
-			ID:         p.ID,
-			Flag:       p.Flag,
-			Proc:       p.proc,
-			FD:         -1, // 标记为虚拟连接，避免使用reactor和async writes
-		}
-		p.clientPeer = &network.ClientPeer{AsyncClientPeer: asyncPeer}
-	})
-
-	// 同步ID和Flag（这些可能在认证后更新）
-	if p.clientPeer != nil && p.clientPeer.AsyncClientPeer != nil {
-		p.clientPeer.AsyncClientPeer.ID = p.ID
-		p.clientPeer.AsyncClientPeer.Flag = p.Flag
-	}
-
-	return p.clientPeer
+	return (*network.AsyncClientPeer)(p).ToClientPeer()
 }
 
 // ============ KCP服务器 ============
@@ -339,6 +223,8 @@ type AsyncKCPServer struct {
 	started     int32
 	peers       sync.Map
 	wg          sync.WaitGroup
+	acceptWG    sync.WaitGroup
+	lifecycleMu sync.Mutex
 	acceptCount uint64
 	connCount   uint64
 	stopChan    chan struct{}
@@ -397,6 +283,13 @@ func (s *AsyncKCPServer) GetConfig() *KCPConfig {
 
 // StartAsync 启动异步KCP服务器
 func (s *AsyncKCPServer) StartAsync() error {
+	s.lifecycleMu.Lock()
+	defer s.lifecycleMu.Unlock()
+	select {
+	case <-s.stopChan:
+		return errors.New("server is stopped")
+	default:
+	}
 	if s.processor == nil {
 		return errors.New("processor not set")
 	}
@@ -405,6 +298,7 @@ func (s *AsyncKCPServer) StartAsync() error {
 		return errors.New("server already started or stopped")
 	}
 	atomic.StoreInt32(&s.running, 1)
+	s.acceptWG.Add(1)
 
 	// KCP的accept循环在goroutine中运行
 	go s.acceptLoop()
@@ -414,6 +308,7 @@ func (s *AsyncKCPServer) StartAsync() error {
 
 // acceptLoop KCP连接接受循环
 func (s *AsyncKCPServer) acceptLoop() {
+	defer s.acceptWG.Done()
 	for atomic.LoadInt32(&s.running) == 1 {
 		if err := s.acceptOne(); err != nil {
 			if atomic.LoadInt32(&s.running) == 1 {
@@ -432,6 +327,10 @@ func (s *AsyncKCPServer) acceptOne() error {
 	conn, err := s.listener.AcceptKCP()
 	if err != nil {
 		return err
+	}
+	if atomic.LoadInt32(&s.running) == 0 {
+		conn.Close()
+		return errors.New("server is stopped")
 	}
 
 	base.Zap().Sugar().Infof("kcp remote address: %s", conn.RemoteAddr().String())
@@ -512,7 +411,7 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *KCPPeer) {
 	for peer.GetState() == KCPPeerStateConnected {
 		buffer := getKCPBuffer()
 
-		n, err := peer.conn.Read(buffer)
+		n, err := peer.Connection.Read(buffer)
 		if err != nil {
 			putKCPBuffer(buffer)
 			if peer.GetState() == KCPPeerStateConnected {
@@ -526,10 +425,6 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *KCPPeer) {
 			continue
 		}
 
-		// 更新统计和活跃时间
-		atomic.AddUint64(&peer.bytesRead, uint64(n))
-		atomic.StoreInt64(&peer.lastActive, time.Now().Unix())
-
 		// 处理接收到的数据
 		messages, err := reader.FeedData(buffer[:n])
 		putKCPBuffer(buffer) // 立即归还缓冲区
@@ -541,41 +436,9 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *KCPPeer) {
 
 		// 处理解析出的消息
 		for _, zcMsg := range messages {
-			// 获取消息体数据
-			body := zcMsg.GetBody()
-
-			// 根据处理模式决定是否复制消息体
-			var msgBody []byte
-			if s.processor.ImmediateMode {
-				// 同步处理模式：可以安全使用零拷贝
-				msgBody = body
-			} else {
-				// 异步处理模式：需要复制消息体
-				msgBody = make([]byte, len(body))
-				copy(msgBody, body)
+			if !network.DeliverZeroCopyMessage(s.processor, peer.ToClientPeer(), zcMsg) {
+				base.Zap().Sugar().Warnf("kcp message queue full, dropping message")
 			}
-
-			msg := &network.Message{
-				Peer: peer.ToClientPeer(),
-				Head: zcMsg.Head,
-				Body: msgBody,
-			}
-
-			if s.processor.ImmediateMode {
-				if cb, ok := s.processor.CallbackMap[msg.Head.ID]; ok {
-					cb(msg)
-				} else if s.processor.UnHandledHandler != nil {
-					s.processor.UnHandledHandler(msg)
-				}
-			} else {
-				select {
-				case s.processor.MessageChan <- msg:
-				default:
-					base.Zap().Sugar().Warnf("kcp message queue full, dropping message")
-				}
-			}
-
-			zcMsg.Release()
 		}
 	}
 }
@@ -598,26 +461,47 @@ func (s *AsyncKCPServer) IsRunning() bool {
 
 // kcpConnWrapper 将KCP连接包装为net.Conn接口
 type kcpConnWrapper struct {
-	conn *_kcp.UDPSession
+	conn         *_kcp.UDPSession
+	bytesRead    uint64
+	bytesWritten uint64
+	lastActive   int64
 }
 
 func (w *kcpConnWrapper) Read(b []byte) (int, error) {
-	return w.conn.Read(b)
+	n, err := w.conn.Read(b)
+	if n > 0 {
+		atomic.AddUint64(&w.bytesRead, uint64(n))
+		atomic.StoreInt64(&w.lastActive, time.Now().Unix())
+	}
+	return n, err
 }
 
 func (w *kcpConnWrapper) Write(b []byte) (int, error) {
-	return w.conn.Write(b)
+	n, err := w.conn.Write(b)
+	if n > 0 {
+		atomic.AddUint64(&w.bytesWritten, uint64(n))
+	}
+	return n, err
 }
 
 func (w *kcpConnWrapper) Close() error {
+	if w.conn == nil {
+		return nil
+	}
 	return w.conn.Close()
 }
 
 func (w *kcpConnWrapper) LocalAddr() net.Addr {
+	if w.conn == nil {
+		return nil
+	}
 	return w.conn.LocalAddr()
 }
 
 func (w *kcpConnWrapper) RemoteAddr() net.Addr {
+	if w.conn == nil {
+		return nil
+	}
 	return w.conn.RemoteAddr()
 }
 

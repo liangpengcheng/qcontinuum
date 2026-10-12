@@ -10,6 +10,8 @@ import (
 
 var maxMessageLength = 1024 * 1024 * 100 // 100MB
 
+var ErrMessageReaderClosed = errors.New("message reader is closed")
+
 // MessageHead the message head (零拷贝设计)
 type MessageHead struct {
 	Length int32
@@ -64,6 +66,7 @@ func (m *ZeroCopyMessage) Release() {
 
 // AsyncMessageReader 异步消息读取器
 type AsyncMessageReader struct {
+	mu           sync.Mutex // Serializes parsing and release of the owned buffer.
 	buffer       *Buffer
 	headerParsed bool
 	currentHead  MessageHead
@@ -80,6 +83,11 @@ func NewAsyncMessageReader() *AsyncMessageReader {
 
 // FeedData 向读取器投递数据
 func (r *AsyncMessageReader) FeedData(data []byte) (result []*ZeroCopyMessage, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.buffer == nil {
+		return nil, ErrMessageReaderClosed
+	}
 	var messages []*ZeroCopyMessage
 	defer func() {
 		if err == nil {
@@ -214,6 +222,8 @@ func (r *AsyncMessageReader) FeedData(data []byte) (result []*ZeroCopyMessage, e
 
 // Release 释放读取器
 func (r *AsyncMessageReader) Release() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.buffer != nil {
 		r.buffer.Release()
 		r.buffer = nil

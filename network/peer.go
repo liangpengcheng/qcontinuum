@@ -3,6 +3,7 @@ package network
 import (
 	"errors"
 	"net"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
@@ -44,6 +45,9 @@ type AsyncClientPeer struct {
 	reactor     *EpollReactor
 	onClosed    func()
 	ownsReactor bool
+	lifecycleMu sync.Mutex // Serializes reactor registration and connection close.
+	clientOnce  sync.Once
+	clientPeer  *ClientPeer
 
 	// 可插拔编解码器（默认protobuf），仅用于新的通用接口
 	codec Codec
@@ -54,23 +58,27 @@ type AsyncClientPeer struct {
 	lastActive   int64 // unix timestamp
 }
 
-// NewWebSocketClientPeer 创建WebSocket客户端peer（无文件描述符）
-func NewWebSocketClientPeer(conn net.Conn, proc *Processor) *ClientPeer {
+// NewStreamClientPeer creates a peer for transports that expose a net.Conn
+// stream without registering a raw socket with a reactor.
+func NewStreamClientPeer(conn net.Conn, proc *Processor) *ClientPeer {
 	peer := &AsyncClientPeer{
 		Connection: conn,
-		FD:         -1, // WebSocket使用虚拟fd
+		FD:         -1, // Stream adapters do not own a reactor registration.
 		Proc:       proc,
 		procPtr:    unsafe.Pointer(proc), // 原子访问的处理器指针
 		ID:         0,
 		state:      int32(PeerStateConnected),
 		lastActive: time.Now().Unix(),
-		reader:     NewAsyncMessageReader(),
-		writer:     NewZeroCopyMessageWriter(),
 		reactor:    nil, // WebSocket不使用reactor
 		codec:      DefaultCodec(),
 	}
 
-	return &ClientPeer{AsyncClientPeer: peer}
+	return peer.ToClientPeer()
+}
+
+// NewWebSocketClientPeer 创建WebSocket客户端peer（无文件描述符）
+func NewWebSocketClientPeer(conn net.Conn, proc *Processor) *ClientPeer {
+	return NewStreamClientPeer(conn, proc)
 }
 
 // NewAsyncClientPeer 创建异步客户端peer
@@ -476,15 +484,24 @@ func (peer *AsyncClientPeer) StartAsyncIO() error {
 
 // OnRead 实现AsyncIOHandler接口 - 处理读事件
 func (peer *AsyncClientPeer) OnRead(fd int, data []byte) error {
+	peer.lifecycleMu.Lock()
 	if peer.GetState() != PeerStateConnected {
+		peer.lifecycleMu.Unlock()
 		return errors.New("peer not connected")
 	}
+	// Stream adapters that drive their own read loop need no async components.
+	// Only allocate a parser if the caller actually uses this common read path.
+	if peer.reader == nil {
+		peer.reader = NewAsyncMessageReader()
+	}
+	reader := peer.reader
+	peer.lifecycleMu.Unlock()
 
 	atomic.StoreInt64(&peer.lastActive, time.Now().Unix())
 	atomic.AddUint64(&peer.bytesRead, uint64(len(data)))
 
 	// 将数据投递给消息读取器
-	messages, err := peer.reader.FeedData(data)
+	messages, err := reader.FeedData(data)
 	if err != nil {
 		base.Zap().Sugar().Warnf("message parse error: %v", err)
 		peer.Close()
@@ -494,51 +511,13 @@ func (peer *AsyncClientPeer) OnRead(fd int, data []byte) error {
 	// 处理解析出的消息
 	proc := peer.getProcessor()
 	for i, zcMsg := range messages {
-		if proc == nil {
-			for _, msg := range messages {
-				msg.Release()
+		if !DeliverZeroCopyMessage(proc, peer.ToClientPeer(), zcMsg) {
+			for _, remaining := range messages[i+1:] {
+				remaining.Release()
 			}
 			peer.Close()
-			return errors.New("processor is nil")
+			return errors.New("message delivery failed")
 		}
-		// 获取消息体数据
-		body := zcMsg.GetBody()
-
-		// 在非ImmediateMode下，消息会被发送到channel异步处理
-		// 此时需要复制消息体，因为zcMsg.Release()后原数据可能被覆盖
-		var msgBody []byte
-		if proc.ImmediateMode {
-			// 同步处理模式：可以安全使用零拷贝
-			msgBody = body
-		} else {
-			// 异步处理模式：需要复制消息体
-			msgBody = make([]byte, len(body))
-			copy(msgBody, body)
-		}
-
-		// 转换为兼容的Message格式
-		msg := &Message{
-			Peer: &ClientPeer{AsyncClientPeer: peer},
-			Head: zcMsg.Head,
-			Body: msgBody,
-		}
-
-		// 处理消息
-		if proc.ImmediateMode {
-			proc.DispatchMessage(msg)
-		} else {
-			if !proc.TryEnqueueMessage(msg) {
-				zcMsg.Release()
-				for _, remaining := range messages[i+1:] {
-					remaining.Release()
-				}
-				peer.Close()
-				return errors.New("message queue full")
-			}
-		}
-
-		// 释放零拷贝消息
-		zcMsg.Release()
 	}
 
 	// 注意：data是[]byte参数，不是*Buffer对象
@@ -551,6 +530,9 @@ func (peer *AsyncClientPeer) OnRead(fd int, data []byte) error {
 // OnWrite 实现AsyncIOHandler接口 - 处理写事件
 func (peer *AsyncClientPeer) OnWrite(fd int) error {
 	// 写事件由writer内部处理
+	if peer.writer == nil {
+		return nil
+	}
 	return peer.writer.notifyWritable()
 }
 
@@ -582,6 +564,13 @@ type ClientPeer struct {
 	*AsyncClientPeer
 }
 
+// ToClientPeer returns a stable business view sharing this connection's fields
+// and lifecycle; transport adapters must not copy its identity or state.
+func (peer *AsyncClientPeer) ToClientPeer() *ClientPeer {
+	peer.clientOnce.Do(func() { peer.clientPeer = &ClientPeer{AsyncClientPeer: peer} })
+	return peer.clientPeer
+}
+
 func NewTcpConnection(address string, proc *Processor) (client *ClientPeer, err error) {
 	socket, err := net.Dial("tcp", address)
 	if err != nil {
@@ -603,9 +592,7 @@ func NewTcpConnection(address string, proc *Processor) (client *ClientPeer, err 
 	}
 
 	asyncPeer.ownsReactor = true
-	client = &ClientPeer{
-		AsyncClientPeer: asyncPeer,
-	}
+	client = asyncPeer.ToClientPeer()
 
 	// 启动异步I/O
 	if err := asyncPeer.StartAsyncIO(); err != nil {

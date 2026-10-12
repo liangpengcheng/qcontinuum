@@ -40,6 +40,11 @@ func (peer *AsyncClientPeer) CheckAfter(timeout time.Duration) {
 }
 
 func (peer *AsyncClientPeer) startReactorIO() error {
+	peer.lifecycleMu.Lock()
+	defer peer.lifecycleMu.Unlock()
+	if peer.GetState() != PeerStateConnected {
+		return errors.New("peer not connected")
+	}
 	if peer.reactor == nil || peer.FD < 0 {
 		return errors.New("reactor or fd is not available")
 	}
@@ -64,11 +69,13 @@ func (peer *AsyncClientPeer) startReactorIO() error {
 }
 
 func (peer *AsyncClientPeer) Close() {
+	peer.lifecycleMu.Lock()
 	if !atomic.CompareAndSwapInt32(
 		&peer.state,
 		int32(PeerStateConnected),
 		int32(PeerStateClosing),
 	) {
+		peer.lifecycleMu.Unlock()
 		return
 	}
 
@@ -84,6 +91,7 @@ func (peer *AsyncClientPeer) Close() {
 	if peer.FD >= 0 {
 		removeConnFromFd(peer.FD)
 	}
+	peer.lifecycleMu.Unlock()
 
 	if peer.writer != nil {
 		peer.writer.Close()
@@ -101,7 +109,7 @@ func (peer *AsyncClientPeer) Close() {
 		if proc := peer.getProcessor(); proc != nil {
 			event := &Event{
 				ID:   RemoveEvent,
-				Peer: &ClientPeer{AsyncClientPeer: peer},
+				Peer: peer.ToClientPeer(),
 			}
 			select {
 			case proc.EventChan <- event:
