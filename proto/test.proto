@@ -9,14 +9,16 @@ option go_package = "github.com/liangpengcheng/qcontinuum/generated/go/testpb;te
 option csharp_namespace = "QContinuum.Test";
 
 // 与 network.MessageHead.ID 对齐的消息号。
+// 注意：1001-1003 已被 tools/stress 的 raw echo 协议占用，
+// protobuf 测试协议使用 2001 段。
 enum MsgId {
   MSG_ID_UNKNOWN = 0;
 
   // 回显测试：客户端 -> 服务端 -> 原样返回，用于压测与 SDK 联调。
-  ECHO = 1001;
+  ECHO = 2001;
 
   // 心跳。
-  HEARTBEAT = 1002;
+  HEARTBEAT = 2002;
 }
 
 // Echo 回显消息。

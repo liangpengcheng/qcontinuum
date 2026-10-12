@@ -26,27 +26,29 @@ const (
 )
 
 // 与 network.MessageHead.ID 对齐的消息号。
+// 注意：1001-1003 已被 tools/stress 的 raw echo 协议占用，
+// protobuf 测试协议使用 2001 段。
 type MsgId int32
 
 const (
 	MsgId_MSG_ID_UNKNOWN MsgId = 0
 	// 回显测试：客户端 -> 服务端 -> 原样返回，用于压测与 SDK 联调。
-	MsgId_ECHO MsgId = 1001
+	MsgId_ECHO MsgId = 2001
 	// 心跳。
-	MsgId_HEARTBEAT MsgId = 1002
+	MsgId_HEARTBEAT MsgId = 2002
 )
 
 // Enum value maps for MsgId.
 var (
 	MsgId_name = map[int32]string{
 		0:    "MSG_ID_UNKNOWN",
-		1001: "ECHO",
-		1002: "HEARTBEAT",
+		2001: "ECHO",
+		2002: "HEARTBEAT",
 	}
 	MsgId_value = map[string]int32{
 		"MSG_ID_UNKNOWN": 0,
-		"ECHO":           1001,
-		"HEARTBEAT":      1002,
+		"ECHO":           2001,
+		"HEARTBEAT":      2002,
 	}
 )
 
@@ -201,8 +203,8 @@ const file_test_proto_rawDesc = "" +
 	"\x15client_time_unix_nano\x18\x01 \x01(\x03R\x12clientTimeUnixNano*6\n" +
 	"\x05MsgId\x12\x12\n" +
 	"\x0eMSG_ID_UNKNOWN\x10\x00\x12\t\n" +
-	"\x04ECHO\x10\xe9\a\x12\x0e\n" +
-	"\tHEARTBEAT\x10\xea\aBSZ?github.com/liangpengcheng/qcontinuum/generated/go/testpb;testpb\xaa\x02\x0fQContinuum.Testb\x06proto3"
+	"\x04ECHO\x10\xd1\x0f\x12\x0e\n" +
+	"\tHEARTBEAT\x10\xd2\x0fBSZ?github.com/liangpengcheng/qcontinuum/generated/go/testpb;testpb\xaa\x02\x0fQContinuum.Testb\x06proto3"
 
 var (
 	file_test_proto_rawDescOnce sync.Once

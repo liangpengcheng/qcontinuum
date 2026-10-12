@@ -27,8 +27,8 @@ namespace QContinuum.Test {
             "Cgp0ZXN0LnByb3RvEg9xY29udGludXVtLnRlc3QiQQoERWNobxILCgNzZXEY",
             "ASABKAMSGwoTc2VuZF90aW1lX3VuaXhfbmFubxgCIAEoAxIPCgdwYXlsb2Fk",
             "GAMgASgMIioKCUhlYXJ0YmVhdBIdChVjbGllbnRfdGltZV91bml4X25hbm8Y",
-            "ASABKAMqNgoFTXNnSWQSEgoOTVNHX0lEX1VOS05PV04QABIJCgRFQ0hPEOkH",
-            "Eg4KCUhFQVJUQkVBVBDqB0JTWj9naXRodWIuY29tL2xpYW5ncGVuZ2NoZW5n",
+            "ASABKAMqNgoFTXNnSWQSEgoOTVNHX0lEX1VOS05PV04QABIJCgRFQ0hPENEP",
+            "Eg4KCUhFQVJUQkVBVBDSD0JTWj9naXRodWIuY29tL2xpYW5ncGVuZ2NoZW5n",
             "L3Fjb250aW51dW0vZ2VuZXJhdGVkL2dvL3Rlc3RwYjt0ZXN0cGKqAg9RQ29u",
             "dGludXVtLlRlc3RiBnByb3RvMw=="));
       descriptor = pbr::FileDescriptor.FromGeneratedCode(descriptorData,
@@ -44,17 +44,19 @@ namespace QContinuum.Test {
   #region Enums
   /// <summary>
   /// 与 network.MessageHead.ID 对齐的消息号。
+  /// 注意：1001-1003 已被 tools/stress 的 raw echo 协议占用，
+  /// protobuf 测试协议使用 2001 段。
   /// </summary>
   public enum MsgId {
     [pbr::OriginalName("MSG_ID_UNKNOWN")] Unknown = 0,
     /// <summary>
     /// 回显测试：客户端 -> 服务端 -> 原样返回，用于压测与 SDK 联调。
     /// </summary>
-    [pbr::OriginalName("ECHO")] Echo = 1001,
+    [pbr::OriginalName("ECHO")] Echo = 2001,
     /// <summary>
     /// 心跳。
     /// </summary>
-    [pbr::OriginalName("HEARTBEAT")] Heartbeat = 1002,
+    [pbr::OriginalName("HEARTBEAT")] Heartbeat = 2002,
   }
 
   #endregion
