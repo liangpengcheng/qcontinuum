@@ -341,24 +341,17 @@ func (s *AsyncKCPServer) acceptOne() error {
 	// 创建KCP专用peer
 	peer := NewKCPPeer(conn, s.processor)
 
-	// 启动连接处理goroutine
+	// Register before starting reads; rejected sessions never produce RemoveEvent.
 	atomic.AddUint64(&s.acceptCount, 1)
+	if !s.processor.TryPostEvent(&network.Event{ID: network.AddEvent, Peer: peer.ToClientPeer()}) {
+		base.Zap().Sugar().Warn("KCP lifecycle backlog full or processor stopping; rejecting connection")
+		peer.Close()
+		return nil
+	}
 	atomic.AddUint64(&s.connCount, 1)
 	s.wg.Add(1)
 	s.peers.Store(peer, struct{}{})
 	go s.handleKCPConnection(peer)
-
-	// 发送连接事件
-	event := &network.Event{
-		ID:   network.AddEvent,
-		Peer: peer.ToClientPeer(),
-	}
-
-	select {
-	case s.processor.EventChan <- event:
-	default:
-		base.Zap().Sugar().Warnf("event queue full, dropping add event")
-	}
 
 	return nil
 }
@@ -383,19 +376,6 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *KCPPeer) {
 
 		// 减少连接计数
 		atomic.AddUint64(&s.connCount, ^uint64(0))
-
-		// 发送移除事件（修复：之前缺少这个通知）
-		if s.processor != nil {
-			event := &network.Event{
-				ID:   network.RemoveEvent,
-				Peer: peer.ToClientPeer(),
-			}
-			select {
-			case s.processor.EventChan <- event:
-			default:
-				base.Zap().Sugar().Warnf("event queue full, dropping remove event")
-			}
-		}
 
 		// 记录统计信息
 		bytesRead, bytesWritten, lastActive := peer.GetStats()
@@ -435,9 +415,13 @@ func (s *AsyncKCPServer) handleKCPConnection(peer *KCPPeer) {
 		}
 
 		// 处理解析出的消息
-		for _, zcMsg := range messages {
+		for i, zcMsg := range messages {
 			if !network.DeliverZeroCopyMessage(s.processor, peer.ToClientPeer(), zcMsg) {
-				base.Zap().Sugar().Warnf("kcp message queue full, dropping message")
+				for _, remaining := range messages[i+1:] {
+					remaining.Release()
+				}
+				base.Zap().Sugar().Warn("KCP message delivery rejected; closing connection")
+				return
 			}
 		}
 	}

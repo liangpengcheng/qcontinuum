@@ -78,6 +78,13 @@ func (peer *AsyncClientPeer) Close() {
 		peer.lifecycleMu.Unlock()
 		return
 	}
+	// Snapshot the owner at the closing transition; Redirect cannot change it now.
+	proc := peer.getProcessorLocked()
+	// Publish before another Close can observe Closing and return. The consumer
+	// waits for transport cleanup and all in-flight callbacks before removal.
+	if proc != nil {
+		proc.postLifecycleEventLocked(&Event{ID: RemoveEvent, Peer: peer.ToClientPeer()})
+	}
 
 	if peer.writer != nil {
 		peer.writer.beginClose()
@@ -102,21 +109,12 @@ func (peer *AsyncClientPeer) Close() {
 
 	atomic.StoreInt32(&peer.state, int32(PeerStateClosed))
 
+	// Wake the recorded removal before transport completion signals server Stop.
+	if proc != nil {
+		proc.signalLifecycle()
+	}
 	if peer.onClosed != nil {
 		peer.onClosed()
-	}
-	if peer.FD >= 0 {
-		if proc := peer.getProcessor(); proc != nil {
-			event := &Event{
-				ID:   RemoveEvent,
-				Peer: peer.ToClientPeer(),
-			}
-			select {
-			case proc.EventChan <- event:
-			default:
-				base.Zap().Sugar().Errorf("event queue full, dropping remove event")
-			}
-		}
 	}
 	if peer.ownsReactor && peer.reactor != nil {
 		peer.reactor.Stop()

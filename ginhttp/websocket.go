@@ -89,12 +89,7 @@ func SetupWebsocket(router *gin.Engine, proc *network.Processor) {
 			peer.Close()
 			return
 		}
-		defer func() {
-			peer.Close()
-			if !proc.TryPostEvent(&network.Event{ID: network.RemoveEvent, Peer: peer}) {
-				base.Zap().Sugar().Warnf("websocket remove event queue full")
-			}
-		}()
+		defer peer.Close()
 
 		reader := network.NewAsyncMessageReader()
 		defer reader.Release()

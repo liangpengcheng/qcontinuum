@@ -97,6 +97,7 @@ type StressServer struct {
 	ginServer     *http.Server
 	kcpServer     *kcp.AsyncKCPServer
 	processor     *network.Processor
+	stopping      int32
 	stats         *ServerStats
 	peerManager   *PeerManager
 	immediateMode bool
@@ -157,6 +158,9 @@ func (s *StressServer) setupProcessor() *network.Processor {
 		atomic.AddUint64(&s.stats.TotalConnections, 1)
 		atomic.AddInt64(&s.stats.ActiveConnections, 1)
 		s.peerManager.Add(event.Peer)
+		if atomic.LoadInt32(&s.stopping) != 0 {
+			event.Peer.Close()
+		}
 	})
 
 	// 断开事件
@@ -251,6 +255,7 @@ func (s *StressServer) PrintStats() {
 }
 
 func (s *StressServer) Stop() {
+	atomic.StoreInt32(&s.stopping, 1)
 	if s.tcpServer != nil {
 		s.tcpServer.Stop()
 	}
@@ -260,6 +265,11 @@ func (s *StressServer) Stop() {
 	if s.kcpServer != nil {
 		s.kcpServer.Stop()
 	}
+	// HTTP Close does not close hijacked WebSocket connections. Late AddEvent
+	// callbacks also close their peer while stopping, so pending adds cannot leak.
+	for _, peer := range s.peerManager.GetAllPeers() {
+		peer.Close()
+	}
 }
 
 func runServer(tcpPort, wsPort, kcpPort int, immediateMode bool) {
@@ -267,7 +277,8 @@ func runServer(tcpPort, wsPort, kcpPort int, immediateMode bool) {
 	proc := server.setupProcessor()
 
 	// 启动processor
-	go proc.StartProcess()
+	processed := make(chan struct{})
+	go func() { proc.StartProcess(); close(processed) }()
 
 	// 启动各协议服务器
 	if err := server.StartTCP(tcpPort); err != nil {
@@ -292,6 +303,8 @@ func runServer(tcpPort, wsPort, kcpPort int, immediateMode bool) {
 
 	fmt.Println("\n正在关闭服务器...")
 	server.Stop()
+	proc.EventChan <- &network.Event{ID: network.ExitEvent, Param: "stress server stopped"}
+	<-processed
 }
 
 // runClient is implemented in stress_client.go

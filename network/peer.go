@@ -35,19 +35,26 @@ type AsyncClientPeer struct {
 	Flag         int32
 	ID           int64
 	state        int32          // PeerState
-	redirectProc unsafe.Pointer // *Processor, 使用unsafe.Pointer实现无锁
+	redirectProc unsafe.Pointer // *Processor, applied under lifecycleMu.
 	Proc         *Processor     // 保持兼容性，但应通过原子操作访问
 	procPtr      unsafe.Pointer // *Processor, 原子访问的处理器指针
 
 	// 异步I/O组件
-	reader      *AsyncMessageReader
-	writer      *ZeroCopyMessageWriter
-	reactor     *EpollReactor
-	onClosed    func()
-	ownsReactor bool
-	lifecycleMu sync.Mutex // Serializes reactor registration and connection close.
-	clientOnce  sync.Once
-	clientPeer  *ClientPeer
+	reader           *AsyncMessageReader
+	writer           *ZeroCopyMessageWriter
+	reactor          *EpollReactor
+	onClosed         func()
+	ownsReactor      bool
+	lifecycleMu      sync.Mutex // Serializes reactor registration and connection close.
+	clientOnce       sync.Once
+	clientPeer       *ClientPeer
+	registered       bool // Protected by lifecycleMu; only accepted peers need removal.
+	notifyOnClose    bool // Preserves outbound TCP's removal without an AddEvent.
+	removeQueued     bool
+	removeDelivered  bool
+	addDelivered     bool
+	removeProc       *Processor
+	messageCallbacks int32 // Atomic readiness check by the lifecycle queue.
 
 	// 可插拔编解码器（默认protobuf），仅用于新的通用接口
 	codec Codec
@@ -201,13 +208,25 @@ func (peer *AsyncClientPeer) pushToWriteQueueWithTimeout(req *writeRequest) bool
 	return false
 }
 
-// Redirect 重新设置处理器（无锁实现）
+// Redirect changes the message owner until the connection begins closing.
 func (peer *AsyncClientPeer) Redirect(proc *Processor) {
+	peer.lifecycleMu.Lock()
+	defer peer.lifecycleMu.Unlock()
+	if peer.GetState() != PeerStateConnected {
+		return
+	}
 	atomic.StorePointer(&peer.redirectProc, unsafe.Pointer(proc))
 }
 
-// getProcessor 获取当前处理器（完全原子化）
+// getProcessor returns the current owner and updates the compatible Proc field.
 func (peer *AsyncClientPeer) getProcessor() *Processor {
+	peer.lifecycleMu.Lock()
+	defer peer.lifecycleMu.Unlock()
+	return peer.getProcessorLocked()
+}
+
+// getProcessorLocked requires lifecycleMu, including updates to the legacy Proc field.
+func (peer *AsyncClientPeer) getProcessorLocked() *Processor {
 	// 检查是否有重定向的处理器
 	if redirectProc := atomic.LoadPointer(&peer.redirectProc); redirectProc != nil {
 		newProc := (*Processor)(redirectProc)
@@ -592,6 +611,7 @@ func NewTcpConnection(address string, proc *Processor) (client *ClientPeer, err 
 	}
 
 	asyncPeer.ownsReactor = true
+	asyncPeer.notifyOnClose = true
 	client = asyncPeer.ToClientPeer()
 
 	// 启动异步I/O

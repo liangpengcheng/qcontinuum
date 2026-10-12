@@ -129,11 +129,10 @@ func (s *AsyncTCPServer) acceptLoop() {
 		atomic.AddUint64(&s.connCount, 1)
 
 		event := &Event{ID: AddEvent, Peer: peer.ToClientPeer()}
-		select {
-		case s.processor.EventChan <- event:
-		case <-s.shutdown:
+		if !s.processor.TryPostEvent(event) {
+			base.Zap().Sugar().Warn("TCP lifecycle backlog full or processor stopping; rejecting connection")
 			peer.Close()
-			return
+			continue
 		}
 
 		if err := peer.StartAsyncIO(); err != nil {

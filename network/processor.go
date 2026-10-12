@@ -66,8 +66,14 @@ type Processor struct {
 	// 更新时间
 	loopTime time.Duration
 	// ImmediateMode 立即回调消息，如果想要线程安全，必须设置为false，默认为false
-	ImmediateMode bool
-	mu            sync.RWMutex
+	ImmediateMode  bool
+	mu             sync.RWMutex
+	queueMu        sync.Mutex // Admission, shutdown, and the lifecycle FIFO.
+	lifecycleQueue []*Event
+	lifecycleWake  chan struct{}
+	stopping       bool
+	stopped        bool
+	inFlight       int
 }
 
 // NewProcessor 新建处理器，包含初始化操作
@@ -89,6 +95,7 @@ func NewProcessorWithLoopTime(loopTime time.Duration) *Processor {
 		CallbackMap:   make(map[int32]MsgCallback),
 		loopTime:      loopTime,
 		ImmediateMode: false,
+		lifecycleWake: make(chan struct{}, 1),
 	}
 	return p
 }
@@ -173,28 +180,47 @@ func (p *Processor) safeProcessOnce(tick <-chan time.Time) (shouldExit bool) {
 		}
 	}()
 
+	if event := p.popLifecycleEvent(); event != nil {
+		p.handleEvent(event)
+		if !p.isStopping() {
+			p.tryProcessOrdinary(tick)
+		}
+		return p.finishIfDrained()
+	}
+	if p.isStopping() {
+		if p.finishIfDrained() {
+			return true
+		}
+		// In-flight immediate callbacks wake us when removal becomes ready.
+		<-p.lifecycleWake
+		return false
+	}
+
 	select {
 	case msg := <-p.MessageChan:
 		p.handleMessage(msg)
 	case event := <-p.EventChan:
-		if event.ID == ExitEvent {
-			base.Zap().Sugar().Infof("Processor exit: %s", event.Param)
-			return true
-		}
-		p.handleEvent(event)
+		p.processOrdinaryEvent(event)
 	case f := <-p.FuncChan:
 		p.handleFunc(f)
 	case <-tick:
 		if p.updateCallback != nil {
 			p.updateCallback()
 		}
+	case <-p.lifecycleWake:
 	}
 
-	return false
+	return p.finishIfDrained()
 }
 
 // handleMessage 安全地处理消息
-func (p *Processor) handleMessage(msg *Message) {
+func (p *Processor) handleMessage(msg *Message) bool {
+	if !p.beginMessage(msg) {
+		return false
+	}
+	// A callback may change Message.Peer; release the peer admitted at entry.
+	peer := msg.Peer
+	defer p.endMessage(peer)
 	p.mu.RLock()
 	cb, ok := p.CallbackMap[msg.Head.ID]
 	unhandled := p.UnHandledHandler
@@ -206,10 +232,33 @@ func (p *Processor) handleMessage(msg *Message) {
 	} else {
 		base.Zap().Sugar().Warnf("can't find callback(%d)", msg.Head.ID)
 	}
+	return true
 }
 
 // handleEvent 安全地处理事件
 func (p *Processor) handleEvent(event *Event) {
+	if event == nil {
+		return
+	}
+	if event.Peer != nil && event.Peer.AsyncClientPeer != nil {
+		peer := event.Peer.AsyncClientPeer
+		peer.lifecycleMu.Lock()
+		switch event.ID {
+		case AddEvent:
+			if peer.addDelivered || peer.removeDelivered {
+				peer.lifecycleMu.Unlock()
+				return
+			}
+			peer.addDelivered = true
+		case RemoveEvent:
+			if peer.removeDelivered {
+				peer.lifecycleMu.Unlock()
+				return
+			}
+			peer.removeDelivered = true
+		}
+		peer.lifecycleMu.Unlock()
+	}
 	p.mu.RLock()
 	cb, ok := p.EventCallback[event.ID]
 	p.mu.RUnlock()

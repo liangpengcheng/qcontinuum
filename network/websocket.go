@@ -50,12 +50,7 @@ func NewWebSocket(path string, proc *Processor) {
 			peer.Close()
 			return
 		}
-		defer func() {
-			peer.Close()
-			if !proc.TryPostEvent(&Event{ID: RemoveEvent, Peer: peer}) {
-				base.Zap().Sugar().Warnf("websocket remove event queue full")
-			}
-		}()
+		defer peer.Close()
 
 		reader := NewAsyncMessageReader()
 		defer reader.Release()
