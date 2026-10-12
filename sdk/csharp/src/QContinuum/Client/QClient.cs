@@ -59,6 +59,13 @@ public sealed class QClient : IAsyncDisposable
             ReconnectMaxDelay = options.ReconnectMaxDelay,
             MaxReconnectAttempts = options.MaxReconnectAttempts,
         };
+        TransportFactory = () => _options.Transport switch
+        {
+            TransportKind.Tcp => new TcpTransport(),
+            TransportKind.Kcp => new KcpTransport(),
+            TransportKind.WebSocket => new WebSocketTransport(),
+            _ => throw new ArgumentOutOfRangeException(nameof(_options.Transport)),
+        };
     }
 
     // ------------------------------------------------------------- public API
@@ -181,7 +188,7 @@ public sealed class QClient : IAsyncDisposable
 
     private async Task ConnectTransportAsync(CancellationToken ct)
     {
-        var transport = CreateTransport();
+        var transport = TransportFactory();
         WireTransport(transport);
         bool published = false;
         try
@@ -211,13 +218,8 @@ public sealed class QClient : IAsyncDisposable
         }
     }
 
-    private ITransport CreateTransport() => _options.Transport switch
-    {
-        TransportKind.Tcp => new TcpTransport(),
-        TransportKind.Kcp => new KcpTransport(),
-        TransportKind.WebSocket => new WebSocketTransport(),
-        _ => throw new ArgumentOutOfRangeException(nameof(_options.Transport)),
-    };
+    /// <summary>传输工厂：每次（重）建连时调用。测试可替换为替身。</summary>
+    internal Func<ITransport> TransportFactory { get; set; }
 
     private void WireTransport(ITransport transport)
     {
