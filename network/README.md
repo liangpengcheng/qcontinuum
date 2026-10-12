@@ -10,6 +10,8 @@ TCP、标准库 WebSocket、Gin WebSocket 和 KCP 采用同一消息过载策略
 
 调用 `peer.Close()` 即会可靠记录注销，业务层与传输适配器无需再补发 `RemoveEvent`。未成功注册的服务端连接不产生注销回调；`NewTcpConnection` 保留主动 TCP 连接原有的关闭通知。生命周期回调在 `StartProcess()` 循环中执行，注销等待连接资源清理及该连接的在途消息回调结束，`Close()` 不等待业务回调，因此允许在回调内关闭自身连接。
 
+显式投递 `RemoveEvent` 也会关闭连接，并向连接当前的 Processor 记录注销；重复投递仍只执行一次注销回调。注销回调只会在连接资源清理完成及在途消息回调结束后执行。
+
 共享消息投递和连接注销使用当前 Processor；关闭开始时确定注销归属，此后 `Redirect` 不再改变它。调用方仍负责 `Redirect` 对应的业务记录迁移。其他自定义事件继续使用普通 `EventChan`，`TryPostEvent` 保留非阻塞、容量不足返回 false 的行为。外部直接写 channel 会绕过入队检查，建议通过投递方法发送连接事件和消息。
 
 ## 正常停止

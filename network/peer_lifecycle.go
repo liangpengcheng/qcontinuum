@@ -69,20 +69,31 @@ func (peer *AsyncClientPeer) startReactorIO() error {
 }
 
 func (peer *AsyncClientPeer) Close() {
+	peer.closeWithEvent(nil)
+}
+
+// A non-nil event requests explicit removal and must be admitted before closing.
+// Admission and the closing transition share lifecycleMu so Redirect and message
+// delivery cannot change ownership or start work between them.
+func (peer *AsyncClientPeer) closeWithEvent(event *Event) bool {
 	peer.lifecycleMu.Lock()
+	proc := peer.getProcessorLocked()
+	if event != nil && (proc == nil || !proc.postLifecycleEventLocked(event)) {
+		peer.lifecycleMu.Unlock()
+		return false
+	}
 	if !atomic.CompareAndSwapInt32(
 		&peer.state,
 		int32(PeerStateConnected),
 		int32(PeerStateClosing),
 	) {
 		peer.lifecycleMu.Unlock()
-		return
+		return event != nil // Duplicate explicit removals are acknowledged.
 	}
 	// Snapshot the owner at the closing transition; Redirect cannot change it now.
-	proc := peer.getProcessorLocked()
 	// Publish before another Close can observe Closing and return. The consumer
 	// waits for transport cleanup and all in-flight callbacks before removal.
-	if proc != nil {
+	if proc != nil && event == nil {
 		proc.postLifecycleEventLocked(&Event{ID: RemoveEvent, Peer: peer.ToClientPeer()})
 	}
 
@@ -119,6 +130,7 @@ func (peer *AsyncClientPeer) Close() {
 	if peer.ownsReactor && peer.reactor != nil {
 		peer.reactor.Stop()
 	}
+	return true
 }
 
 func (peer *AsyncClientPeer) OnError(fd int, err error) {

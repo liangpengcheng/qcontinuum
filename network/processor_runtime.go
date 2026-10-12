@@ -33,13 +33,10 @@ func (p *Processor) TryEnqueueMessage(msg *Message) bool {
 		peer := msg.Peer.AsyncClientPeer
 		peer.lifecycleMu.Lock()
 		defer peer.lifecycleMu.Unlock()
-		if peer.GetState() != PeerStateConnected || peer.removeQueued || peer.removeDelivered {
-			return false
-		}
 	}
 	p.queueMu.Lock()
 	defer p.queueMu.Unlock()
-	if p.stopping {
+	if !p.acceptsMessageLocked(msg) {
 		return false
 	}
 	select {
@@ -53,6 +50,7 @@ func (p *Processor) TryEnqueueMessage(msg *Message) bool {
 // TryPostEvent admits peer Add/Remove events to an ordered lifecycle FIFO.
 // Adds have a 1024-event admission limit; accepted peers' removals are deduplicated
 // and never rejected for queue capacity. Other events use EventChan as before.
+// Explicit removal closes the connection and uses its current processor.
 func (p *Processor) TryPostEvent(event *Event) bool {
 	if p == nil || event == nil {
 		return false

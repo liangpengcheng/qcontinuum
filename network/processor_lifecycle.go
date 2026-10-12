@@ -13,6 +13,9 @@ const maxPendingLifecycleEvents = 1024
 // then processor; consumers only inspect atomic callback readiness under queueMu.
 func (p *Processor) postLifecycleEvent(event *Event) bool {
 	peer := event.Peer.AsyncClientPeer
+	if event.ID == RemoveEvent {
+		return peer.closeWithEvent(event)
+	}
 	peer.lifecycleMu.Lock()
 	defer peer.lifecycleMu.Unlock()
 	return p.postLifecycleEventLocked(event)
@@ -75,7 +78,7 @@ func (p *Processor) popLifecycleEvent() *Event {
 	}
 	event := p.lifecycleQueue[0]
 	if event.ID == RemoveEvent {
-		if event.Peer.GetState() == PeerStateClosing || atomic.LoadInt32(&event.Peer.messageCallbacks) != 0 {
+		if event.Peer.GetState() != PeerStateClosed || atomic.LoadInt32(&event.Peer.messageCallbacks) != 0 {
 			return nil
 		}
 	}
@@ -95,18 +98,28 @@ func (p *Processor) beginMessage(msg *Message) bool {
 		peer := msg.Peer.AsyncClientPeer
 		peer.lifecycleMu.Lock()
 		defer peer.lifecycleMu.Unlock()
-		if peer.GetState() != PeerStateConnected || peer.removeQueued || peer.removeDelivered {
-			return false
-		}
 	}
 	p.queueMu.Lock()
 	defer p.queueMu.Unlock()
-	if p.stopping {
+	if !p.acceptsMessageLocked(msg) {
 		return false
 	}
 	p.inFlight++
 	if msg.Peer != nil && msg.Peer.AsyncClientPeer != nil {
 		atomic.AddInt32(&msg.Peer.messageCallbacks, 1)
+	}
+	return true
+}
+
+// acceptsMessageLocked requires queueMu and, when present, the peer's lifecycleMu.
+// Both queue admission and callback entry apply this same rule.
+func (p *Processor) acceptsMessageLocked(msg *Message) bool {
+	if p.stopping {
+		return false
+	}
+	if msg.Peer != nil && msg.Peer.AsyncClientPeer != nil {
+		peer := msg.Peer.AsyncClientPeer
+		return peer.GetState() == PeerStateConnected && !peer.removeQueued && !peer.removeDelivered
 	}
 	return true
 }

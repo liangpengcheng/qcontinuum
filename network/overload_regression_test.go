@@ -3,6 +3,7 @@ package network
 import (
 	"encoding/binary"
 	"errors"
+	"io"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -48,6 +49,85 @@ func TestRemoveEventSurvivesFullOrdinaryQueue(t *testing.T) {
 	finishTestProcessor(t, proc)
 	if added != 1 || removed != 1 || len(records) != 0 {
 		t.Fatalf("business record leaked: add=%d remove=%d records=%d", added, removed, len(records))
+	}
+}
+
+func TestExplicitRemoveClosesConnectionBeforeCallback(t *testing.T) {
+	for _, directChannel := range []bool{false, true} {
+		name := "TryPostEvent"
+		if directChannel {
+			name = "EventChan"
+		}
+		t.Run(name, func(t *testing.T) {
+			proc := NewProcessor()
+			conn, remote := net.Pipe()
+			defer remote.Close()
+			peer := NewStreamClientPeer(conn, proc)
+			defer peer.Close()
+			var added, removed int
+			proc.AddEventCallback(AddEvent, func(*Event) { added++ })
+			proc.AddEventCallback(RemoveEvent, func(event *Event) {
+				removed++
+				if added != 1 || event.Peer != peer || event.Param != "explicit removal" {
+					t.Error("explicit removal lost its registration, identity, or parameter")
+				}
+				if peer.GetState() != PeerStateClosed {
+					t.Error("remove callback ran before the connection was closed")
+				}
+				remote.SetReadDeadline(time.Now().Add(time.Second))
+				if _, err := remote.Read(make([]byte, 1)); !errors.Is(err, io.EOF) {
+					t.Errorf("remove callback ran before transport cleanup: %v", err)
+				}
+			})
+			if !proc.TryPostEvent(&Event{ID: AddEvent, Peer: peer}) {
+				t.Fatal("registration failed")
+			}
+			event := &Event{ID: RemoveEvent, Peer: peer, Param: "explicit removal"}
+			if directChannel {
+				proc.EventChan <- event
+				proc.safeProcessOnce(nil) // Dispatch AddEvent and admit the ordinary RemoveEvent.
+			} else if !proc.TryPostEvent(event) {
+				t.Fatal("explicit removal was rejected")
+			}
+			if !proc.TryPostEvent(event) {
+				t.Fatal("duplicate removal should be acknowledged")
+			}
+			if proc.TryEnqueueMessage(&Message{Peer: peer}) {
+				t.Error("removed connection accepted a business message")
+			}
+			finishTestProcessor(t, proc)
+			if added != 1 || removed != 1 {
+				t.Fatalf("explicit removal was not paired exactly once: add=%d remove=%d", added, removed)
+			}
+		})
+	}
+}
+
+func TestExplicitRemoveUsesRedirectedProcessor(t *testing.T) {
+	old, current := NewProcessor(), NewProcessor()
+	peer := NewStreamClientPeer(nil, old)
+	defer peer.Close()
+	if !old.TryPostEvent(&Event{ID: AddEvent, Peer: peer}) {
+		t.Fatal("registration failed")
+	}
+	old.safeProcessOnce(nil)
+	var oldRemoves, currentRemoves int
+	old.AddEventCallback(RemoveEvent, func(*Event) { oldRemoves++ })
+	current.AddEventCallback(RemoveEvent, func(event *Event) {
+		currentRemoves++
+		if event.Peer != peer || event.Param != "redirected removal" || peer.GetState() != PeerStateClosed {
+			t.Error("redirected removal lost its identity, parameter, or closed state")
+		}
+	})
+	peer.Redirect(current)
+	if !old.TryPostEvent(&Event{ID: RemoveEvent, Peer: peer, Param: "redirected removal"}) {
+		t.Fatal("explicit removal was rejected")
+	}
+	peer.Redirect(old) // Closing fixes ownership even if the caller tries to redirect again.
+	finishTestProcessor(t, current)
+	finishTestProcessor(t, old)
+	if oldRemoves != 0 || currentRemoves != 1 {
+		t.Fatalf("removal did not use the current owner: old=%d current=%d", oldRemoves, currentRemoves)
 	}
 }
 
@@ -162,6 +242,15 @@ func awaitTestCondition(t *testing.T, description string, ready func() bool) {
 }
 
 func TestExitWaitsForImmediateSelfClose(t *testing.T) {
+	testExitWaitsForImmediateSelfClose(t, false)
+}
+
+func TestExitWaitsForImmediateSelfRemove(t *testing.T) {
+	testExitWaitsForImmediateSelfClose(t, true)
+}
+
+func testExitWaitsForImmediateSelfClose(t *testing.T, explicitRemove bool) {
+	t.Helper()
 	proc := NewProcessor()
 	peer := NewStreamClientPeer(nil, proc)
 	added := make(chan struct{})
@@ -176,7 +265,13 @@ func TestExitWaitsForImmediateSelfClose(t *testing.T) {
 	unblock := func() { releaseOnce.Do(func() { close(release) }) }
 	t.Cleanup(unblock)
 	proc.AddCallback(1, func(*Message) {
-		peer.Close()
+		if explicitRemove {
+			if !proc.TryPostEvent(&Event{ID: RemoveEvent, Peer: peer}) {
+				t.Error("explicit removal inside a callback was rejected")
+			}
+		} else {
+			peer.Close()
+		}
 		close(callbackClosed)
 		<-release
 		close(callbackDone)
