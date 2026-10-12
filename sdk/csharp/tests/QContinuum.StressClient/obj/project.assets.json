@@ -1,0 +1,134 @@
+{
+  "version": 3,
+  "targets": {
+    "net8.0": {
+      "Google.Protobuf/3.36.2": {
+        "type": "package",
+        "compile": {
+          "lib/net8.0/Google.Protobuf.dll": {
+            "related": ".pdb;.xml"
+          }
+        },
+        "runtime": {
+          "lib/net8.0/Google.Protobuf.dll": {
+            "related": ".pdb;.xml"
+          }
+        }
+      },
+      "QContinuum/0.1.0": {
+        "type": "project",
+        "framework": ".NETCoreApp,Version=v8.0",
+        "dependencies": {
+          "Google.Protobuf": "3.36.2"
+        },
+        "compile": {
+          "bin/placeholder/QContinuum.dll": {}
+        },
+        "runtime": {
+          "bin/placeholder/QContinuum.dll": {}
+        }
+      }
+    }
+  },
+  "libraries": {
+    "Google.Protobuf/3.36.2": {
+      "sha512": "Ci1q1iJg74qAE5riTA2FbMS0wPbpruPQI/JQ9DrAsRo2VsSxgt1e/pmxGxgrci+pXJEgrSYg2vPl8rrStZkclQ==",
+      "type": "package",
+      "path": "google.protobuf/3.36.2",
+      "files": [
+        ".nupkg.metadata",
+        ".signature.p7s",
+        "google.protobuf.3.36.2.nupkg.sha512",
+        "google.protobuf.nuspec",
+        "lib/net8.0/Google.Protobuf.dll",
+        "lib/net8.0/Google.Protobuf.pdb",
+        "lib/net8.0/Google.Protobuf.xml",
+        "lib/netstandard2.0/Google.Protobuf.dll",
+        "lib/netstandard2.0/Google.Protobuf.pdb",
+        "lib/netstandard2.0/Google.Protobuf.xml"
+      ]
+    },
+    "QContinuum/0.1.0": {
+      "type": "project",
+      "path": "../../src/QContinuum/QContinuum.csproj",
+      "msbuildProject": "../../src/QContinuum/QContinuum.csproj"
+    }
+  },
+  "projectFileDependencyGroups": {
+    "net8.0": [
+      "Google.Protobuf >= 3.36.2",
+      "QContinuum >= 0.1.0"
+    ]
+  },
+  "packageFolders": {
+    "/home/hatch/.nuget/packages/": {}
+  },
+  "project": {
+    "version": "1.0.0",
+    "restore": {
+      "projectUniqueName": "/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/tests/QContinuum.StressClient/QContinuum.StressClient.csproj",
+      "projectName": "QContinuum.StressClient",
+      "projectPath": "/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/tests/QContinuum.StressClient/QContinuum.StressClient.csproj",
+      "packagesPath": "/home/hatch/.nuget/packages/",
+      "outputPath": "/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/tests/QContinuum.StressClient/obj/",
+      "projectStyle": "PackageReference",
+      "configFilePaths": [
+        "/home/hatch/.nuget/NuGet/NuGet.Config"
+      ],
+      "originalTargetFrameworks": [
+        "net8.0"
+      ],
+      "sources": {
+        "https://api.nuget.org/v3/index.json": {}
+      },
+      "frameworks": {
+        "net8.0": {
+          "targetAlias": "net8.0",
+          "projectReferences": {
+            "/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/QContinuum.csproj": {
+              "projectPath": "/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/QContinuum.csproj"
+            }
+          }
+        }
+      },
+      "warningProperties": {
+        "warnAsError": [
+          "NU1605"
+        ]
+      },
+      "restoreAuditProperties": {
+        "enableAudit": "true",
+        "auditLevel": "low",
+        "auditMode": "direct"
+      }
+    },
+    "frameworks": {
+      "net8.0": {
+        "targetAlias": "net8.0",
+        "dependencies": {
+          "Google.Protobuf": {
+            "target": "Package",
+            "version": "[3.36.2, )"
+          }
+        },
+        "imports": [
+          "net461",
+          "net462",
+          "net47",
+          "net471",
+          "net472",
+          "net48",
+          "net481"
+        ],
+        "assetTargetFallback": true,
+        "warn": true,
+        "frameworkReferences": {
+          "Microsoft.NETCore.App": {
+            "privateAssets": "all"
+          }
+        },
+        "runtimeIdentifierGraphPath": "/home/hatch/workspace/tools/dotnet/sdk/8.0.425/PortableRuntimeIdentifierGraph.json"
+      }
+    }
+  }
+}

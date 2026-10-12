@@ -1,0 +1,57 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{CC9AB2E9-4432-4CB5-B2AA-8D9FCE1BB286}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QContinuum", "src\QContinuum\QContinuum.csproj", "{00C17227-C560-4768-989B-947CD976EC70}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{160519B3-2F94-4EC6-803D-4EA08878A26D}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QContinuum.Tests", "tests\QContinuum.Tests\QContinuum.Tests.csproj", "{45E847A5-FBB2-468F-A647-FEAD70CA81A2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QContinuum.SmokeTest", "tests\QContinuum.SmokeTest\QContinuum.SmokeTest.csproj", "{A11179A4-0D24-460B-8485-0F8DAD8087D5}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QContinuum.InteropTest", "tests\QContinuum.InteropTest\QContinuum.InteropTest.csproj", "{616CEB27-070B-4BE5-A4D6-70D6AFB1EAF3}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "QContinuum.StressClient", "tests\QContinuum.StressClient\QContinuum.StressClient.csproj", "{4821A3D5-2DFC-482F-9F78-B2AAE8A82690}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{00C17227-C560-4768-989B-947CD976EC70}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{00C17227-C560-4768-989B-947CD976EC70}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{00C17227-C560-4768-989B-947CD976EC70}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{00C17227-C560-4768-989B-947CD976EC70}.Release|Any CPU.Build.0 = Release|Any CPU
+		{45E847A5-FBB2-468F-A647-FEAD70CA81A2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{45E847A5-FBB2-468F-A647-FEAD70CA81A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{45E847A5-FBB2-468F-A647-FEAD70CA81A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{45E847A5-FBB2-468F-A647-FEAD70CA81A2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A11179A4-0D24-460B-8485-0F8DAD8087D5}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A11179A4-0D24-460B-8485-0F8DAD8087D5}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A11179A4-0D24-460B-8485-0F8DAD8087D5}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A11179A4-0D24-460B-8485-0F8DAD8087D5}.Release|Any CPU.Build.0 = Release|Any CPU
+		{616CEB27-070B-4BE5-A4D6-70D6AFB1EAF3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{616CEB27-070B-4BE5-A4D6-70D6AFB1EAF3}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{616CEB27-070B-4BE5-A4D6-70D6AFB1EAF3}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{616CEB27-070B-4BE5-A4D6-70D6AFB1EAF3}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4821A3D5-2DFC-482F-9F78-B2AAE8A82690}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4821A3D5-2DFC-482F-9F78-B2AAE8A82690}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4821A3D5-2DFC-482F-9F78-B2AAE8A82690}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4821A3D5-2DFC-482F-9F78-B2AAE8A82690}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{00C17227-C560-4768-989B-947CD976EC70} = {CC9AB2E9-4432-4CB5-B2AA-8D9FCE1BB286}
+		{45E847A5-FBB2-468F-A647-FEAD70CA81A2} = {160519B3-2F94-4EC6-803D-4EA08878A26D}
+		{A11179A4-0D24-460B-8485-0F8DAD8087D5} = {160519B3-2F94-4EC6-803D-4EA08878A26D}
+		{616CEB27-070B-4BE5-A4D6-70D6AFB1EAF3} = {160519B3-2F94-4EC6-803D-4EA08878A26D}
+		{4821A3D5-2DFC-482F-9F78-B2AAE8A82690} = {160519B3-2F94-4EC6-803D-4EA08878A26D}
+	EndGlobalSection
+EndGlobal

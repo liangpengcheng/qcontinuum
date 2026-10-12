@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>QContinuum.StressClient</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\QContinuum\QContinuum.csproj" />
+    <PackageReference Include="Google.Protobuf" Version="3.36.2" />
+    <Compile Include="..\..\..\..\generated\csharp\Test.cs" Link="Generated\Test.cs" />
+  </ItemGroup>
+
+</Project>

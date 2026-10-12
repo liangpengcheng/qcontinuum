@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>QContinuum</AssemblyName>
+    <RootNamespace>QContinuum</RootNamespace>
+    <Version>0.1.0</Version>
+    <Description>C# client SDK for qcontinuum game server networking (TCP / KCP / WebSocket).</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Google.Protobuf" Version="3.36.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="QContinuum.Tests" />
+    <InternalsVisibleTo Include="QContinuum.StressClient" />
+    <InternalsVisibleTo Include="QContinuum.InteropTest" />
+  </ItemGroup>
+
+</Project>

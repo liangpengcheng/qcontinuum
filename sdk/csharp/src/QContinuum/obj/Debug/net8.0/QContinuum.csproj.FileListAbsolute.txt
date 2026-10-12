@@ -1,0 +1,13 @@
+/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/obj/Debug/net8.0/QContinuum.csproj.AssemblyReference.cache
+/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/obj/Debug/net8.0/QContinuum.GeneratedMSBuildEditorConfig.editorconfig
+/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/obj/Debug/net8.0/QContinuum.AssemblyInfoInputs.cache
+/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/obj/Debug/net8.0/QContinuum.AssemblyInfo.cs
+/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/obj/Debug/net8.0/QContinuum.csproj.CoreCompileInputs.cache
+/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/obj/Debug/net8.0/QContinuum.sourcelink.json
+/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/bin/Debug/net8.0/QContinuum.deps.json
+/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/bin/Debug/net8.0/QContinuum.dll
+/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/bin/Debug/net8.0/QContinuum.pdb
+/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/obj/Debug/net8.0/QContinuum.dll
+/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/obj/Debug/net8.0/refint/QContinuum.dll
+/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/obj/Debug/net8.0/QContinuum.pdb
+/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/obj/Debug/net8.0/ref/QContinuum.dll

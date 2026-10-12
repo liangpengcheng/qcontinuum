@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "dgSpecHash": "f1Vn3vpeUOY=",
+  "success": true,
+  "projectFilePath": "/home/hatch/workspace/qcontinuum-sdk/sdk/csharp/src/QContinuum/QContinuum.csproj",
+  "expectedPackageFiles": [
+    "/home/hatch/.nuget/packages/google.protobuf/3.36.2/google.protobuf.3.36.2.nupkg.sha512"
+  ],
+  "logs": []
+}
