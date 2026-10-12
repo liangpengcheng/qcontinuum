@@ -21,3 +21,41 @@ TCP、标准库 WebSocket、Gin WebSocket 和 KCP 采用同一消息过载策略
 Processor 收到 `ExitEvent` 后拒绝新注册和新业务消息，继续清空生命周期 FIFO，并等待在途消息回调完成才退出。普通积压任务不在退出时继续执行。退出后的 Processor 不再接受新工作；应为新一轮服务创建新的 Processor。
 
 注销回调需正常完成。保证覆盖进程运行及有序退出期间，不提供进程崩溃后的事件持久化或回调重试。
+
+## Gin WebSocket 接入限制
+
+`ginhttp.SetupWebsocket(router, proc)` 保留原有签名和 `/ws` 路径，但采用以下默认配置：
+
+| 配置 | 默认行为 |
+| --- | --- |
+| `CheckOrigin` | nil 使用 Gorilla 的主机校验：Origin 主机（含端口）必须与请求 Host 一致；无 Origin 请求可以连接 |
+| `ReadLimit` | 1 MiB，同时限制单个 WebSocket 消息的总负载和单个业务协议包的总长度，协议包长度包含 8 字节头部 |
+| `ReadTimeout` | 60 秒，包含等待下一条消息及读取完整业务协议包的时间 |
+| `HandshakeTimeout` | 10 秒，限制升级响应写入；HTTP 请求头读取超时由调用方的 HTTP 服务配置 |
+| `WriteTimeout` | 10 秒，限制每次二进制消息发送 |
+
+跨主机的浏览器客户端需要显式配置 Origin 策略。原来发送超过 1 MiB 消息的客户端需要提高 `ReadLimit`；空闲超过 60 秒的连接会断开。每个完整业务协议包结束后开始下一轮读取期限，分片、未完成的协议包、文本和 Ping/Pong 不延长期限，因此仅发送 WebSocket Ping/Pong 不能维持空闲连接。需要保活的客户端应在期限内发送完整业务协议包，或配置更长的读取超时。
+
+通过新入口配置允许的来源、更大的消息和更长的超时，例如：
+
+```go
+err := ginhttp.SetupWebsocketWithConfig(router, proc, ginhttp.WebSocketConfig{
+	CheckOrigin: func(r *http.Request) bool {
+		// 精确匹配完整 Origin；此策略拒绝无 Origin 的请求。
+		return r.Header.Get("Origin") == "https://game.example.com"
+	},
+	ReadLimit:        4 << 20, // 包含协议头的 4 MiB 接收上限
+	ReadTimeout:      2 * time.Minute,
+	HandshakeTimeout: 10 * time.Second,
+	WriteTimeout:     10 * time.Second,
+})
+if err != nil {
+	return err
+}
+```
+
+`WebSocketConfig{}` 与旧入口使用相同默认配置。数值零值采用默认值，负值或非零且小于 8 字节的 `ReadLimit` 返回错误，错误发生时不会注册路由。Origin 回调可能并发执行，调用方需保证回调线程安全。
+
+接收过程先读取并检查 8 字节协议头，再以最多 8 KiB 的块读取消息体并交给现有协议解析器；不会先缓存整个 WebSocket 消息。业务协议包可以跨多个 WebSocket 消息，一个 WebSocket 消息也可以包含多个协议包，但都受上述两个大小限制约束。网络层现有的 100 MiB 消息体上限仍然有效，即使提高 `ReadLimit` 也不会取消此限制。完整协议包立即投递；后续数据错误不会回滚已执行的业务回调，关闭连接时尚未处理的队列消息仍会被跳过。
+
+Gorilla 会在 WebSocket 消息累计超限时发送关闭码 1009，包括连续分片和被忽略的文本消息。协议长度错误、读取/写入超时及消息入队失败都会关闭当前连接，注册成功的连接继续通过既有生命周期流程可靠注销。
