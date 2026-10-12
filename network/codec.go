@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 // Codec defines a generic encoder/decoder for messages.
@@ -14,7 +14,7 @@ type Codec interface {
 	Unmarshal(data []byte, v interface{}) error
 }
 
-// ProtobufCodec is the default codec using github.com/golang/protobuf/proto
+// ProtobufCodec is the default codec using google.golang.org/protobuf/proto.
 type ProtobufCodec struct{}
 
 func (ProtobufCodec) Marshal(v interface{}) ([]byte, error) {

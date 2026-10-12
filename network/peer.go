@@ -8,8 +8,8 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/liangpengcheng/qcontinuum/base"
+	"google.golang.org/protobuf/proto"
 )
 
 const (

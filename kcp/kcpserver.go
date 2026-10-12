@@ -7,10 +7,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/golang/protobuf/proto"
 	"github.com/liangpengcheng/qcontinuum/base"
 	"github.com/liangpengcheng/qcontinuum/network"
 	_kcp "github.com/xtaci/kcp-go/v5"
+	"google.golang.org/protobuf/proto"
 )
 
 const maxKCPMessageLength = 100 * 1024 * 1024

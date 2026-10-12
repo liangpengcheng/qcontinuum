@@ -5,6 +5,22 @@ import (
 
 	"github.com/liangpengcheng/qcontinuum/kcp"
 	"github.com/liangpengcheng/qcontinuum/network"
+	"google.golang.org/protobuf/proto"
+)
+
+type protobufMessageSender interface {
+	SendMessage(proto.Message, int32) error
+}
+
+type protobufMessageWriter interface {
+	WriteMessage(int, proto.Message, int32) error
+}
+
+// Public send APIs must accept the modern protobuf message interface.
+var (
+	_ protobufMessageSender = (*kcp.KCPPeer)(nil)
+	_ protobufMessageSender = (*network.AsyncClientPeer)(nil)
+	_ protobufMessageWriter = (*network.ZeroCopyMessageWriter)(nil)
 )
 
 func TestPublicPeerLiteralCompatibility(t *testing.T) {

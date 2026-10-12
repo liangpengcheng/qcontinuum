@@ -5,7 +5,7 @@ import (
 
 	"sync"
 
-	"github.com/golang/protobuf/proto"
+	"google.golang.org/protobuf/proto"
 )
 
 var maxMessageLength = 1024 * 1024 * 100 // 100MB
