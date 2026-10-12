@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = ["qcontinuum"]
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+prost = "0.13"
+tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
+thiserror = "2"
+bytes = "1"
+futures-util = "0.3"
+rand = "0.8"

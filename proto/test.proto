@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+// qcontinuum 测试/压测用协议。
+// 消息号（MsgId）与 network.MessageHead.ID 对齐：帧格式为
+// 8 字节小端头 [Length(int32)=body长度][ID(int32)] + protobuf body。
+package qcontinuum.test;
+
+option go_package = "github.com/liangpengcheng/qcontinuum/generated/go/testpb;testpb";
+option csharp_namespace = "QContinuum.Test";
+
+// 与 network.MessageHead.ID 对齐的消息号。
+// 注意：1001-1003 已被 tools/stress 的 raw echo 协议占用，
+// protobuf 测试协议使用 2001 段。
+enum MsgId {
+  MSG_ID_UNKNOWN = 0;
+
+  // 回显测试：客户端 -> 服务端 -> 原样返回，用于压测与 SDK 联调。
+  ECHO = 2001;
+
+  // 心跳。
+  HEARTBEAT = 2002;
+}
+
+// Echo 回显消息。
+message Echo {
+  // 序列号，客户端用它校验回显一致性与乱序。
+  int64 seq = 1;
+
+  // 客户端发送时间（Unix 纳秒），用于测量 RTT。
+  int64 send_time_unix_nano = 2;
+
+  // 负载。
+  bytes payload = 3;
+}
+
+// Heartbeat 心跳消息。
+message Heartbeat {
+  // 客户端时间（Unix 纳秒）。
+  int64 client_time_unix_nano = 1;
+}
