@@ -155,6 +155,19 @@ test_framing/fast:
 	$(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_framing.dir/build.make qcontinuum/tests/CMakeFiles/test_framing.dir/build
 .PHONY : test_framing/fast
 
+#=============================================================================
+# Target rules for targets named test_qclient
+
+# Build rule for target.
+test_qclient: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 test_qclient
+.PHONY : test_qclient
+
+# fast build rule for target.
+test_qclient/fast:
+	$(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_qclient.dir/build.make qcontinuum/tests/CMakeFiles/test_qclient.dir/build
+.PHONY : test_qclient/fast
+
 home/hatch/workspace/qcontinuum-cpp/third_party/ikcp.o: home/hatch/workspace/qcontinuum-cpp/third_party/ikcp.c.o
 .PHONY : home/hatch/workspace/qcontinuum-cpp/third_party/ikcp.o
 
@@ -190,6 +203,7 @@ help:
 	@echo "... ikcp"
 	@echo "... qcontinuum"
 	@echo "... test_framing"
+	@echo "... test_qclient"
 	@echo "... home/hatch/workspace/qcontinuum-cpp/third_party/ikcp.o"
 	@echo "... home/hatch/workspace/qcontinuum-cpp/third_party/ikcp.i"
 	@echo "... home/hatch/workspace/qcontinuum-cpp/third_party/ikcp.s"

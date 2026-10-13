@@ -130,6 +130,20 @@ test_framing/fast:
 	cd /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build && $(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_framing.dir/build.make qcontinuum/tests/CMakeFiles/test_framing.dir/build
 .PHONY : test_framing/fast
 
+# Convenience name for target.
+qcontinuum/tests/CMakeFiles/test_qclient.dir/rule:
+	cd /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 qcontinuum/tests/CMakeFiles/test_qclient.dir/rule
+.PHONY : qcontinuum/tests/CMakeFiles/test_qclient.dir/rule
+
+# Convenience name for target.
+test_qclient: qcontinuum/tests/CMakeFiles/test_qclient.dir/rule
+.PHONY : test_qclient
+
+# fast build rule for target.
+test_qclient/fast:
+	cd /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build && $(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_qclient.dir/build.make qcontinuum/tests/CMakeFiles/test_qclient.dir/build
+.PHONY : test_qclient/fast
+
 test_framing.o: test_framing.cpp.o
 .PHONY : test_framing.o
 
@@ -154,6 +168,30 @@ test_framing.cpp.s:
 	cd /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build && $(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_framing.dir/build.make qcontinuum/tests/CMakeFiles/test_framing.dir/test_framing.cpp.s
 .PHONY : test_framing.cpp.s
 
+test_qclient.o: test_qclient.cpp.o
+.PHONY : test_qclient.o
+
+# target to build an object file
+test_qclient.cpp.o:
+	cd /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build && $(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_qclient.dir/build.make qcontinuum/tests/CMakeFiles/test_qclient.dir/test_qclient.cpp.o
+.PHONY : test_qclient.cpp.o
+
+test_qclient.i: test_qclient.cpp.i
+.PHONY : test_qclient.i
+
+# target to preprocess a source file
+test_qclient.cpp.i:
+	cd /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build && $(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_qclient.dir/build.make qcontinuum/tests/CMakeFiles/test_qclient.dir/test_qclient.cpp.i
+.PHONY : test_qclient.cpp.i
+
+test_qclient.s: test_qclient.cpp.s
+.PHONY : test_qclient.s
+
+# target to generate assembly for a file
+test_qclient.cpp.s:
+	cd /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build && $(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_qclient.dir/build.make qcontinuum/tests/CMakeFiles/test_qclient.dir/test_qclient.cpp.s
+.PHONY : test_qclient.cpp.s
+
 # Help Target
 help:
 	@echo "The following are some of the valid targets for this Makefile:"
@@ -163,9 +201,13 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... test_framing"
+	@echo "... test_qclient"
 	@echo "... test_framing.o"
 	@echo "... test_framing.i"
 	@echo "... test_framing.s"
+	@echo "... test_qclient.o"
+	@echo "... test_qclient.i"
+	@echo "... test_qclient.s"
 .PHONY : help
 
 

@@ -98,6 +98,7 @@ qcontinuum/clean: qcontinuum/tests/clean
 
 # Recursive "all" directory target.
 qcontinuum/tests/all: qcontinuum/tests/CMakeFiles/test_framing.dir/all
+qcontinuum/tests/all: qcontinuum/tests/CMakeFiles/test_qclient.dir/all
 .PHONY : qcontinuum/tests/all
 
 # Recursive "preinstall" directory target.
@@ -106,6 +107,7 @@ qcontinuum/tests/preinstall:
 
 # Recursive "clean" directory target.
 qcontinuum/tests/clean: qcontinuum/tests/CMakeFiles/test_framing.dir/clean
+qcontinuum/tests/clean: qcontinuum/tests/CMakeFiles/test_qclient.dir/clean
 .PHONY : qcontinuum/tests/clean
 
 #=============================================================================
@@ -186,6 +188,33 @@ test_framing: qcontinuum/tests/CMakeFiles/test_framing.dir/rule
 qcontinuum/tests/CMakeFiles/test_framing.dir/clean:
 	$(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_framing.dir/build.make qcontinuum/tests/CMakeFiles/test_framing.dir/clean
 .PHONY : qcontinuum/tests/CMakeFiles/test_framing.dir/clean
+
+#=============================================================================
+# Target rules for target qcontinuum/tests/CMakeFiles/test_qclient.dir
+
+# All Build rule for target.
+qcontinuum/tests/CMakeFiles/test_qclient.dir/all: CMakeFiles/ikcp.dir/all
+qcontinuum/tests/CMakeFiles/test_qclient.dir/all: qcontinuum/CMakeFiles/qcontinuum.dir/all
+	$(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_qclient.dir/build.make qcontinuum/tests/CMakeFiles/test_qclient.dir/depend
+	$(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_qclient.dir/build.make qcontinuum/tests/CMakeFiles/test_qclient.dir/build
+	@$(CMAKE_COMMAND) -E cmake_echo_color "--switch=$(COLOR)" --progress-dir=/home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build/CMakeFiles --progress-num=14,15 "Built target test_qclient"
+.PHONY : qcontinuum/tests/CMakeFiles/test_qclient.dir/all
+
+# Build rule for subdir invocation for target.
+qcontinuum/tests/CMakeFiles/test_qclient.dir/rule: cmake_check_build_system
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build/CMakeFiles 13
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 qcontinuum/tests/CMakeFiles/test_qclient.dir/all
+	$(CMAKE_COMMAND) -E cmake_progress_start /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build/CMakeFiles 0
+.PHONY : qcontinuum/tests/CMakeFiles/test_qclient.dir/rule
+
+# Convenience name for target.
+test_qclient: qcontinuum/tests/CMakeFiles/test_qclient.dir/rule
+.PHONY : test_qclient
+
+# clean rule for target.
+qcontinuum/tests/CMakeFiles/test_qclient.dir/clean:
+	$(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_qclient.dir/build.make qcontinuum/tests/CMakeFiles/test_qclient.dir/clean
+.PHONY : qcontinuum/tests/CMakeFiles/test_qclient.dir/clean
 
 #=============================================================================
 # Special targets to cleanup operation of make.

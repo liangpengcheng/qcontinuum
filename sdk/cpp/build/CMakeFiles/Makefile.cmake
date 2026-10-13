@@ -60,4 +60,5 @@ set(CMAKE_DEPEND_INFO_FILES
   "CMakeFiles/ikcp.dir/DependInfo.cmake"
   "qcontinuum/CMakeFiles/qcontinuum.dir/DependInfo.cmake"
   "qcontinuum/tests/CMakeFiles/test_framing.dir/DependInfo.cmake"
+  "qcontinuum/tests/CMakeFiles/test_qclient.dir/DependInfo.cmake"
   )
