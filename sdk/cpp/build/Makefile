@@ -168,6 +168,19 @@ test_qclient/fast:
 	$(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_qclient.dir/build.make qcontinuum/tests/CMakeFiles/test_qclient.dir/build
 .PHONY : test_qclient/fast
 
+#=============================================================================
+# Target rules for targets named kcp_wire
+
+# Build rule for target.
+kcp_wire: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 kcp_wire
+.PHONY : kcp_wire
+
+# fast build rule for target.
+kcp_wire/fast:
+	$(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/kcp_wire.dir/build.make qcontinuum/tests/CMakeFiles/kcp_wire.dir/build
+.PHONY : kcp_wire/fast
+
 home/hatch/workspace/qcontinuum-cpp/third_party/ikcp.o: home/hatch/workspace/qcontinuum-cpp/third_party/ikcp.c.o
 .PHONY : home/hatch/workspace/qcontinuum-cpp/third_party/ikcp.o
 
@@ -201,6 +214,7 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... ikcp"
+	@echo "... kcp_wire"
 	@echo "... qcontinuum"
 	@echo "... test_framing"
 	@echo "... test_qclient"

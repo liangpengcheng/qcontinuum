@@ -144,6 +144,44 @@ test_qclient/fast:
 	cd /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build && $(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/test_qclient.dir/build.make qcontinuum/tests/CMakeFiles/test_qclient.dir/build
 .PHONY : test_qclient/fast
 
+# Convenience name for target.
+qcontinuum/tests/CMakeFiles/kcp_wire.dir/rule:
+	cd /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build && $(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 qcontinuum/tests/CMakeFiles/kcp_wire.dir/rule
+.PHONY : qcontinuum/tests/CMakeFiles/kcp_wire.dir/rule
+
+# Convenience name for target.
+kcp_wire: qcontinuum/tests/CMakeFiles/kcp_wire.dir/rule
+.PHONY : kcp_wire
+
+# fast build rule for target.
+kcp_wire/fast:
+	cd /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build && $(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/kcp_wire.dir/build.make qcontinuum/tests/CMakeFiles/kcp_wire.dir/build
+.PHONY : kcp_wire/fast
+
+kcp_wire.o: kcp_wire.cpp.o
+.PHONY : kcp_wire.o
+
+# target to build an object file
+kcp_wire.cpp.o:
+	cd /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build && $(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/kcp_wire.dir/build.make qcontinuum/tests/CMakeFiles/kcp_wire.dir/kcp_wire.cpp.o
+.PHONY : kcp_wire.cpp.o
+
+kcp_wire.i: kcp_wire.cpp.i
+.PHONY : kcp_wire.i
+
+# target to preprocess a source file
+kcp_wire.cpp.i:
+	cd /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build && $(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/kcp_wire.dir/build.make qcontinuum/tests/CMakeFiles/kcp_wire.dir/kcp_wire.cpp.i
+.PHONY : kcp_wire.cpp.i
+
+kcp_wire.s: kcp_wire.cpp.s
+.PHONY : kcp_wire.s
+
+# target to generate assembly for a file
+kcp_wire.cpp.s:
+	cd /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/build && $(MAKE) $(MAKESILENT) -f qcontinuum/tests/CMakeFiles/kcp_wire.dir/build.make qcontinuum/tests/CMakeFiles/kcp_wire.dir/kcp_wire.cpp.s
+.PHONY : kcp_wire.cpp.s
+
 test_framing.o: test_framing.cpp.o
 .PHONY : test_framing.o
 
@@ -200,8 +238,12 @@ help:
 	@echo "... depend"
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
+	@echo "... kcp_wire"
 	@echo "... test_framing"
 	@echo "... test_qclient"
+	@echo "... kcp_wire.o"
+	@echo "... kcp_wire.i"
+	@echo "... kcp_wire.s"
 	@echo "... test_framing.o"
 	@echo "... test_framing.i"
 	@echo "... test_framing.s"
