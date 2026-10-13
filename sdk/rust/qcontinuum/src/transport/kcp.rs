@@ -66,6 +66,7 @@ impl Default for KcpTransport {
     }
 }
 
+#[async_trait::async_trait]
 impl Transport for KcpTransport {
     async fn connect(&mut self, host: &str, port: u16, timeout_dur: Duration) -> Result<()> {
         let addr = format!("{host}:{port}");

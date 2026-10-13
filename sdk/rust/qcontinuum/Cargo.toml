@@ -13,6 +13,7 @@ thiserror.workspace = true
 bytes.workspace = true
 futures-util.workspace = true
 rand.workspace = true
+async-trait.workspace = true
 kcp = "0.6"
 
 [build-dependencies]

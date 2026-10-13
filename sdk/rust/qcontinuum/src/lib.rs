@@ -28,4 +28,5 @@ pub mod test_proto {
     include!(concat!(env!("OUT_DIR"), "/qcontinuum.test.rs"));
 }
 
-pub use protocol::{QError, QErrorKind, Result};
+pub use client::{ConnectionState, QClient, QClientOptions, TransportKind};
+pub use protocol::{QError, QErrorKind, QMessage, Result};

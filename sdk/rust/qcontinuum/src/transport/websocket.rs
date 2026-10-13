@@ -38,6 +38,7 @@ fn map_ws_error(e: tokio_tungstenite::tungstenite::Error) -> QError {
     QError::new(kind, e.to_string())
 }
 
+#[async_trait::async_trait]
 impl Transport for WebSocketTransport {
     async fn connect(&mut self, host: &str, port: u16, timeout_dur: Duration) -> Result<()> {
         let url = format!("ws://{host}:{port}/ws");

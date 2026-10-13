@@ -26,6 +26,7 @@ impl Default for TcpTransport {
     }
 }
 
+#[async_trait::async_trait]
 impl Transport for TcpTransport {
     async fn connect(&mut self, host: &str, port: u16, timeout_dur: Duration) -> Result<()> {
         let addr = format!("{host}:{port}");

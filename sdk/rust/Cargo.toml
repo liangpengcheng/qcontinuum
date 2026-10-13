@@ -3,6 +3,7 @@ resolver = "2"
 members = ["qcontinuum"]
 
 [workspace.dependencies]
+async-trait = "0.1"
 tokio = { version = "1", features = ["full"] }
 prost = "0.13"
 tokio-tungstenite = { version = "0.24", features = ["native-tls"] }
