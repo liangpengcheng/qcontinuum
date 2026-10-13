@@ -73,6 +73,7 @@ qcontinuum/tests/CMakeFiles/test_framing.dir/test_framing.cpp.o: /home/hatch/wor
   /usr/include/c++/13/cstdint \
   /usr/include/c++/13/cstdio \
   /usr/include/c++/13/cstdlib \
+  /usr/include/c++/13/cstring \
   /usr/include/c++/13/cwchar \
   /usr/include/c++/13/debug/assertions.h \
   /usr/include/c++/13/debug/debug.h \
@@ -106,6 +107,8 @@ qcontinuum/tests/CMakeFiles/test_framing.dir/test_framing.cpp.o: /home/hatch/wor
   /usr/include/stdint.h \
   /usr/include/stdio.h \
   /usr/include/stdlib.h \
+  /usr/include/string.h \
+  /usr/include/strings.h \
   /usr/include/wchar.h \
   /usr/include/x86_64-linux-gnu/asm/errno.h \
   /usr/include/x86_64-linux-gnu/bits/atomic_wide_counter.h \
@@ -224,6 +227,8 @@ qcontinuum/tests/CMakeFiles/test_framing.dir/test_framing.cpp.o: /home/hatch/wor
 
 /usr/include/x86_64-linux-gnu/bits/time64.h:
 
+/usr/include/x86_64-linux-gnu/bits/struct_mutex.h:
+
 /usr/include/c++/13/bits/string_view.tcc:
 
 /usr/include/c++/13/bits/requires_hosted.h:
@@ -298,6 +303,12 @@ qcontinuum/tests/CMakeFiles/test_framing.dir/test_framing.cpp.o: /home/hatch/wor
 
 /usr/include/c++/13/cwchar:
 
+/usr/include/x86_64-linux-gnu/bits/uintn-identity.h:
+
+/usr/include/x86_64-linux-gnu/bits/stdlib-float.h:
+
+/usr/include/c++/13/bits/exception.h:
+
 /usr/include/c++/13/bits/iterator_concepts.h:
 
 /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/qcontinuum/include/qcontinuum/protocol/error.hpp:
@@ -318,8 +329,6 @@ qcontinuum/tests/CMakeFiles/test_framing.dir/test_framing.cpp.o: /home/hatch/wor
 
 /home/hatch/workspace/qcontinuum-cpp/sdk/cpp/qcontinuum/include/qcontinuum/protocol/framing.hpp:
 
-/usr/include/x86_64-linux-gnu/bits/struct_rwlock.h:
-
 /usr/include/c++/13/bits/std_abs.h:
 
 /usr/include/c++/13/bits/uses_allocator.h:
@@ -339,8 +348,6 @@ qcontinuum/tests/CMakeFiles/test_framing.dir/test_framing.cpp.o: /home/hatch/wor
 /usr/include/c++/13/numbers:
 
 /usr/include/c++/13/string:
-
-/usr/include/x86_64-linux-gnu/bits/struct_mutex.h:
 
 /usr/include/c++/13/bits/nested_exception.h:
 
@@ -374,12 +381,6 @@ qcontinuum/tests/CMakeFiles/test_framing.dir/test_framing.cpp.o: /home/hatch/wor
 
 /usr/include/stdc-predef.h:
 
-/usr/include/x86_64-linux-gnu/bits/uintn-identity.h:
-
-/usr/include/c++/13/bits/exception.h:
-
-/usr/include/x86_64-linux-gnu/bits/stdlib-float.h:
-
 /usr/include/c++/13/bits/stl_function.h:
 
 /usr/include/c++/13/bits/utility.h:
@@ -411,6 +412,8 @@ qcontinuum/tests/CMakeFiles/test_framing.dir/test_framing.cpp.o: /home/hatch/wor
 /usr/include/c++/13/cstdint:
 
 /usr/include/c++/13/cstdlib:
+
+/usr/include/c++/13/cstring:
 
 /usr/include/c++/13/debug/assertions.h:
 
@@ -466,6 +469,16 @@ qcontinuum/tests/CMakeFiles/test_framing.dir/test_framing.cpp.o: /home/hatch/wor
 
 /usr/include/stdlib.h:
 
+/usr/include/string.h:
+
+/usr/include/x86_64-linux-gnu/gnu/stubs.h:
+
+/usr/include/x86_64-linux-gnu/bits/endian.h:
+
+/usr/include/x86_64-linux-gnu/bits/struct_rwlock.h:
+
+/usr/include/strings.h:
+
 /usr/include/x86_64-linux-gnu/bits/types/struct_timeval.h:
 
 /usr/include/x86_64-linux-gnu/asm/errno.h:
@@ -483,10 +496,6 @@ qcontinuum/tests/CMakeFiles/test_framing.dir/test_framing.cpp.o: /home/hatch/wor
 /usr/include/c++/13/bits/uses_allocator_args.h:
 
 /usr/include/x86_64-linux-gnu/bits/long-double.h:
-
-/usr/include/x86_64-linux-gnu/gnu/stubs.h:
-
-/usr/include/x86_64-linux-gnu/bits/endian.h:
 
 /usr/include/c++/13/bits/basic_string.h:
 

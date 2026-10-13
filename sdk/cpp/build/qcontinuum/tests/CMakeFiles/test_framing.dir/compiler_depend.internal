@@ -74,6 +74,7 @@ qcontinuum/tests/CMakeFiles/test_framing.dir/test_framing.cpp.o
  /usr/include/c++/13/cstdint
  /usr/include/c++/13/cstdio
  /usr/include/c++/13/cstdlib
+ /usr/include/c++/13/cstring
  /usr/include/c++/13/cwchar
  /usr/include/c++/13/debug/assertions.h
  /usr/include/c++/13/debug/debug.h
@@ -107,6 +108,8 @@ qcontinuum/tests/CMakeFiles/test_framing.dir/test_framing.cpp.o
  /usr/include/stdint.h
  /usr/include/stdio.h
  /usr/include/stdlib.h
+ /usr/include/string.h
+ /usr/include/strings.h
  /usr/include/wchar.h
  /usr/include/x86_64-linux-gnu/asm/errno.h
  /usr/include/x86_64-linux-gnu/bits/atomic_wide_counter.h
