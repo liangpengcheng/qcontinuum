@@ -169,7 +169,7 @@ func (s *StressServer) setupProcessor() *network.Processor {
 		s.peerManager.Remove(event.Peer)
 	})
 
-	// Protobuf 回显（供 C# SDK 联调与压测，消息号 2001 段）
+	// Protobuf 回显（供 SDK 联调与压测，消息号 2001 段；与 feat/csharp-sdk 一致）
 	registerProtobufEcho(proc, s.stats)
 
 	s.processor = proc
