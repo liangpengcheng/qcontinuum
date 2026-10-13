@@ -158,9 +158,14 @@ func (t *tcpConn) read() ([]byte, error) {
 }
 func (t *tcpConn) close() error { return t.c.Close() }
 
-type wsConn struct{ c *websocket.Conn }
+type wsConn struct {
+	c  *websocket.Conn
+	mu sync.Mutex // gorilla/websocket 禁止并发写；sendLoop 与混沌注入可能同时写
+}
 
 func (w *wsConn) write(pkt []byte) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	return w.c.WriteMessage(websocket.BinaryMessage, pkt)
 }
 func (w *wsConn) read() ([]byte, error) {
@@ -202,7 +207,7 @@ func dialTransport(kind, host string, port int) (pbConn, error) {
 			return nil, err
 		}
 		c.SetReadLimit(wsReadLimit)
-		return &wsConn{c}, nil
+		return &wsConn{c: c}, nil
 	case "kcp":
 		c, err := _kcp.DialWithOptions(addr, nil, 0, 0)
 		if err != nil {
