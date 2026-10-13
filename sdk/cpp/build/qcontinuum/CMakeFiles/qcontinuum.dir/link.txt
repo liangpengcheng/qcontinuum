@@ -1,0 +1,2 @@
+/usr/bin/ar qc libqcontinuum.a CMakeFiles/qcontinuum.dir/src/protocol/error.cpp.o CMakeFiles/qcontinuum.dir/src/protocol/framing.cpp.o CMakeFiles/qcontinuum.dir/src/transport/tcp_transport.cpp.o CMakeFiles/qcontinuum.dir/src/transport/websocket_transport.cpp.o CMakeFiles/qcontinuum.dir/src/transport/kcp_transport.cpp.o CMakeFiles/qcontinuum.dir/src/client/qclient.cpp.o CMakeFiles/qcontinuum.dir/generated/test.pb.cc.o
+/usr/bin/ranlib libqcontinuum.a

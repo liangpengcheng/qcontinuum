@@ -1,0 +1,2 @@
+/usr/bin/ar qc libikcp.a "CMakeFiles/ikcp.dir/home/hatch/workspace/qcontinuum-cpp/third_party/ikcp.c.o"
+/usr/bin/ranlib libikcp.a
