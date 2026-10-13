@@ -13,3 +13,8 @@ add_executable(kcp_wire kcp_wire.cpp)
 target_link_libraries(kcp_wire PRIVATE ikcp)
 target_include_directories(kcp_wire PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party)
+
+# 联调工具：C++ <-> Go protobuf Echo（消息号 2001），需先启动 Go 压测服。
+# 用法：./interop_echo <tcp|kcp|ws> [host] [port] [count]
+add_executable(interop_echo interop_echo.cpp)
+target_link_libraries(interop_echo PRIVATE qcontinuum)

@@ -10,6 +10,10 @@ add_library(asio INTERFACE)
 target_include_directories(asio INTERFACE
     ${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/asio/asio/include)
 target_compile_definitions(asio INTERFACE ASIO_STANDALONE)
+if(WIN32)
+    # standalone Asio 要求调用方定义 Windows 目标版本
+    target_compile_definitions(asio INTERFACE _WIN32_WINNT=0x0A00)
+endif()
 if(UNIX)
     target_link_libraries(asio INTERFACE pthread)
 endif()

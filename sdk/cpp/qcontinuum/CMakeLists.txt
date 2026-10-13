@@ -2,7 +2,16 @@
 # Use system protoc (matches system libprotobuf 3.21).
 # The bundled 36.x protoc generates code incompatible with libprotobuf 3.21.
 set(PROTO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../../../proto)
-set(PROTOC_BIN protoc)
+# Generate C++ protobuf from proto/test.proto.
+# Use the protoc that matches the linked libprotobuf: prefer the one found
+# by find_package(Protobuf) (set in the parent scope), fall back to PATH.
+# Note: the bundled 36.x protoc generates code incompatible with
+# system libprotobuf 3.21, so PATH lookup only makes sense when they match.
+if(Protobuf_PROTOC_EXECUTABLE)
+    set(PROTOC_BIN ${Protobuf_PROTOC_EXECUTABLE})
+else()
+    set(PROTOC_BIN protoc)
+endif()
 
 set(GENERATED_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${GENERATED_DIR})

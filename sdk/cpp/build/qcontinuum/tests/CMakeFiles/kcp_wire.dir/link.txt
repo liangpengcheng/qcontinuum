@@ -1,1 +1,0 @@
-/usr/bin/c++ -g CMakeFiles/kcp_wire.dir/kcp_wire.cpp.o -o kcp_wire  ../../libikcp.a 

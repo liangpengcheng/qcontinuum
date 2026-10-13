@@ -1,0 +1,22 @@
+# C/C++ build outputs
+build/
+[Bb]in/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.a
+*.so
+*.o
+*.d
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+
+# OS
+.DS_Store
+Thumbs.db
