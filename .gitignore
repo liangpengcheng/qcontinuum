@@ -3,3 +3,17 @@
 [Oo]bj/
 *.user
 .vs/
+
+# Rust build outputs
+target/
+**/target/
+
+# C/C++ build outputs
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+*.a
+*.so

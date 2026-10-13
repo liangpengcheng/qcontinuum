@@ -1,0 +1,23 @@
+[package]
+name = "qcontinuum"
+version = "0.1.0"
+edition = "2021"
+description = "Rust client SDK for the qcontinuum game server framework (TCP/KCP/WebSocket, protobuf)"
+license = "MIT"
+
+[dependencies]
+tokio.workspace = true
+prost.workspace = true
+tokio-tungstenite.workspace = true
+thiserror.workspace = true
+bytes.workspace = true
+futures-util.workspace = true
+rand.workspace = true
+async-trait.workspace = true
+kcp = "0.6"
+
+[build-dependencies]
+prost-build = "0.13"
+
+[dev-dependencies]
+tokio-test = "0.4"
